@@ -31,6 +31,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     from .etl.encryption import Encryption
     from .etl.extractor import StreamingExtractor
     from .etl.transform_sandbox import TransformSandbox
+    from .etl.cleaner_registry import CleanerRegistry
     from .monitoring.quality_reporter import QualityReporter
     from .core.pipeline import ETLPipeline
     from .core.task_manager import TaskManager
@@ -64,6 +65,11 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     # 4. ETL 组件
     extractor = StreamingExtractor()
     sandbox = TransformSandbox("custom_etl")
+
+    # 热插拔清洗模板注册中心
+    cleaner_registry = CleanerRegistry("clean_templates")
+    cleaner_registry.start_watching()
+
     router = TableRouter(db, cache)
     loader = Loader(db)
 
@@ -85,7 +91,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     tm = TaskManager(cm, db, pool, st, ha, archiver)
 
     # 8. Web
-    app = create_app(cm, tm, pool, ha, qr, enc, db)
+    app = create_app(cm, tm, pool, ha, qr, enc, db, cleaner_registry)
 
     # 9. 启动
     pool.start()
@@ -116,6 +122,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     logger.info("ETL Service stopping...")
     pool.stop()
     ha.stop()
+    cleaner_registry.stop_watching()
     db.dispose()
 
 

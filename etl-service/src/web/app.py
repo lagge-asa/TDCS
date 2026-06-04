@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 def create_app(config_manager, task_manager=None,
                worker_pool=None, ha_elector=None,
-               quality_reporter=None, encryption=None, db=None):
+               quality_reporter=None, encryption=None, db=None,
+               cleaner_registry=None):
     app = Flask(__name__)
     cfg = config_manager.config
 
@@ -35,6 +36,7 @@ def create_app(config_manager, task_manager=None,
     app.config["quality_reporter"] = quality_reporter
     app.config["encryption"] = encryption
     app.config["db"] = db
+    app.config["cleaner_registry"] = cleaner_registry
 
     # 注册 Blueprint
     from .api.system import bp as system_bp
