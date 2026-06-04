@@ -46,6 +46,9 @@ def create_app(config_manager, task_manager=None,
     from .api.config_api import bp as config_bp
     from .api.cleaners import bp as cleaners_bp
     from .api.users import bp as users_bp
+    from .api.audit import bp as audit_bp
+    from .api.dashboard import bp as dashboard_bp
+    from .api.monthly import bp as monthly_bp
 
     import os
     from flask import send_from_directory
@@ -63,6 +66,9 @@ def create_app(config_manager, task_manager=None,
     app.register_blueprint(config_bp, url_prefix="/api/v1/config")
     app.register_blueprint(cleaners_bp, url_prefix="/api/v1/cleaners")
     app.register_blueprint(users_bp, url_prefix="/api/v1/users")
+    app.register_blueprint(audit_bp, url_prefix="/api/v1/audit-logs")
+    app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
+    app.register_blueprint(monthly_bp, url_prefix="/api/v1/monthly")
 
     return app
 
