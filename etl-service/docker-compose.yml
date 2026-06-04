@@ -2,31 +2,38 @@ version: "3.9"
 services:
   mysql:
     image: mysql:8.0
+    container_name: etl-mysql
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_dev_only
-      MYSQL_DATABASE: etl_db
-      MYSQL_USER: etl_user
-      MYSQL_PASSWORD: etl_dev_pass
+      - "MYSQL_ROOT_PASSWORD=root_dev_only"
+      - "MYSQL_DATABASE=etl_db"
+      - "MYSQL_USER=etl_user"
+      - "MYSQL_PASSWORD=etl_dev_pass"
+      - "MYSQL_ALLOW_EMPTY_PASSWORD=no"
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
     command: >
       --default-authentication-plugin=caching_sha2_password
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
+      --explicit_defaults_for_timestamp=1
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_dev_only"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
+    container_name: etl-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     command: redis-server --save "" --appendonly no
 
 volumes:
   mysql_data:
+    driver: local

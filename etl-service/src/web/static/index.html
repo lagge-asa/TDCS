@@ -245,11 +245,11 @@ async function loadDashboard() {
     document.getElementById('healthStatus').innerHTML = '<span class="dot dot-red"></span>服务不可达';
   }
   try {
-    const t = await api('GET', '/api/v1/tasks');
+    const t = await api('GET', '/api/v1/tasks/');
     document.getElementById('kpiTasks').textContent = t.tasks ? t.tasks.length : '—';
   } catch {}
   try {
-    const f = await api('GET', '/api/v1/files');
+    const f = await api('GET', '/api/v1/files/');
     const files = f.files || [];
     document.getElementById('kpiSuccess').textContent = files.filter(x => x.status === 'SUCCESS').length;
     document.getElementById('kpiFailed').textContent  = files.filter(x => x.status === 'FAILED').length;
@@ -265,7 +265,7 @@ async function loadDashboard() {
 
 async function loadTasks() {
   try {
-    const data = await api('GET', '/api/v1/tasks');
+    const data = await api('GET', '/api/v1/tasks/');
     const tasks = data.tasks || [];
     document.getElementById('taskList').innerHTML = tasks.length
       ? '<table><thead><tr><th>任务 ID</th><th>名称</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
@@ -290,7 +290,7 @@ async function taskAct(id, action) {
 async function loadFiles() {
   const s = document.getElementById('fileStatusFilter').value;
   try {
-    const data = await api('GET', '/api/v1/files' + (s ? '?status=' + s : ''));
+    const data = await api('GET', '/api/v1/files/' + (s ? '?status=' + s : ''));
     const files = data.files || [];
     document.getElementById('fileTable').innerHTML = files.length
       ? files.map(f => '<tr><td style="font-family:monospace;font-size:12px">' + f.file_name + '</td><td style="color:#64748b">' + (f.task_id || '—') + '</td><td>' + badge(f.status) + '</td><td>' + (f.row_count || 0).toLocaleString() + '</td><td>' + (f.retry_count || 0) + '</td><td style="color:#f87171;font-size:11px">' + (f.error_type || '—') + '</td><td>' + (f.status === 'FAILED' ? '<button class="btn btn-ghost" onclick="retryFile(' + f.id + ')">重试</button>' : '—') + '</td></tr>').join('')
@@ -307,7 +307,7 @@ async function retryFile(id) {
 
 async function loadQualityInit() {
   try {
-    const data = await api('GET', '/api/v1/tasks');
+    const data = await api('GET', '/api/v1/tasks/');
     document.getElementById('qualityTaskSel').innerHTML =
       (data.tasks || []).map(t => '<option value="' + t.task_id + '">' + t.name + ' (' + t.task_id + ')</option>').join('');
   } catch {}

@@ -14,7 +14,7 @@ class ServiceConfigSchema(BaseModel):
     instance_id: str
     log_level: str = "INFO"
 
-    @validator("log_level", allow_reuse=True)
+    @validator("log_level", allow_reuse=True, check_fields=False)
     def check_log_level(cls, v):
         allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         if v.upper() not in allowed:
@@ -72,7 +72,7 @@ class HAConfigSchema(BaseModel):
     failover_timeout: conint(ge=10, le=300) = 30
     degraded_mode: str = "pause"
 
-    @validator("degraded_mode", allow_reuse=True)
+    @validator("degraded_mode", allow_reuse=True, check_fields=False)
     def check_degraded_mode(cls, v):
         if v not in ("pause", "standalone"):
             raise ValueError("degraded_mode must be pause or standalone")
@@ -89,7 +89,7 @@ class WebConfigSchema(BaseModel):
     server: str = "waitress"
     threads: conint(ge=1, le=32) = 4
 
-    @validator("server", allow_reuse=True)
+    @validator("server", allow_reuse=True, check_fields=False)
     def check_server(cls, v):
         if v not in ("waitress", "development"):
             raise ValueError("server must be waitress or development")
@@ -106,7 +106,7 @@ class AlertingChannelSchema(BaseModel):
     webhook: str = ""
     secret: str = ""
 
-    @validator("kind", allow_reuse=True)
+    @validator("kind", allow_reuse=True, check_fields=False)
     def check_kind(cls, v):
         if v not in ("dingtalk", "email", "webhook"):
             raise ValueError("channel type must be dingtalk/email/webhook")
@@ -132,11 +132,17 @@ class MonitoringConfigSchema(BaseModel):
 
 class MonitorConfigSchema(BaseModel):
     folder_path: str
-    file_extensions: List[str] = Field(..., min_items=1)
+    file_extensions: List[str]
     recursive: bool = False
     debounce_seconds: confloat(ge=0.5, le=60) = 3.0
     stability_check_interval: confloat(ge=0.5, le=10) = 1.0
     stability_check_count: conint(ge=1, le=10) = 3
+
+    @validator("file_extensions", allow_reuse=True, check_fields=False)
+    def check_file_extensions(cls, v):
+        if not v or len(v) < 1:
+            raise ValueError("file_extensions must have at least 1 item")
+        return v
 
 
 class EtlConfigSchema(BaseModel):
@@ -149,7 +155,7 @@ class EtlConfigSchema(BaseModel):
     sandbox_timeout: conint(ge=5, le=300) = 30
     sandbox_memory_mb: conint(ge=32, le=4096) = 256
 
-    @validator("extractor", allow_reuse=True)
+    @validator("extractor", allow_reuse=True, check_fields=False)
     def check_extractor(cls, v):
         if v not in ("csv", "json", "excel"):
             raise ValueError("extractor must be csv/json/excel")
@@ -164,7 +170,7 @@ class TableConfigSchema(BaseModel):
     retention_months: conint(ge=0) = 0
     archive_old_tables: bool = True
 
-    @validator("base_table", allow_reuse=True)
+    @validator("base_table", allow_reuse=True, check_fields=False)
     def check_base_table(cls, v):
         if not re.fullmatch(r'^[a-z][a-z0-9_]*$', v):
             raise ValueError(
@@ -178,7 +184,7 @@ class ErrorHandlingConfigSchema(BaseModel):
     dead_letter_dir: str
     on_row_error: str = "skip"
 
-    @validator("on_row_error", allow_reuse=True)
+    @validator("on_row_error", allow_reuse=True, check_fields=False)
     def check_on_row_error(cls, v):
         if v not in ("skip", "abort"):
             raise ValueError("on_row_error must be skip or abort")
@@ -192,7 +198,7 @@ class ArchiveConfigSchema(BaseModel):
     compress_after_days: conint(ge=0) = 7
     cleanup_after_days: conint(ge=0) = 90
 
-    @validator("mode", allow_reuse=True)
+    @validator("mode", allow_reuse=True, check_fields=False)
     def check_mode(cls, v):
         if v not in ("keep", "move", "delete"):
             raise ValueError("archive.mode must be keep/move/delete")
@@ -216,7 +222,7 @@ class TaskConfigSchema(BaseModel):
     archive: ArchiveConfigSchema = ArchiveConfigSchema()
     schedule: ScheduleConfigSchema = ScheduleConfigSchema()
 
-    @validator("task_id", allow_reuse=True)
+    @validator("task_id", allow_reuse=True, check_fields=False)
     def check_task_id(cls, v):
         if not re.fullmatch(r'^[a-z][a-z0-9_]*$', v):
             raise ValueError(
@@ -233,7 +239,13 @@ class AppConfigSchema(BaseModel):
     high_availability: HAConfigSchema = HAConfigSchema()
     web: WebConfigSchema
     monitoring: MonitoringConfigSchema = MonitoringConfigSchema()
-    tasks: List[TaskConfigSchema] = Field(..., min_items=1)
+    tasks: List[TaskConfigSchema]
+
+    @validator("tasks", allow_reuse=True, check_fields=False)
+    def check_tasks(cls, v):
+        if not v or len(v) < 1:
+            raise ValueError("tasks must have at least 1 item")
+        return v
 
 
 def _normalize_raw(raw: dict) -> dict:
