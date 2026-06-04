@@ -1,0 +1,27 @@
+# Core
+PyYAML==6.0.2
+pydantic==1.10.21
+SQLAlchemy==2.0.41
+PyMySQL==1.1.1
+cryptography==44.0.3
+
+# ETL
+chardet==5.2.0
+ijson==3.3.0
+openpyxl==3.1.5
+
+# Web
+Flask==3.1.1
+waitress==3.0.2
+Flask-Limiter==4.1.1
+PyJWT==2.10.1
+bcrypt==4.3.0
+
+# Monitoring
+prometheus-client==0.22.1
+
+# Windows Service
+pywin32==311
+
+# Watcher
+watchdog==6.0.0

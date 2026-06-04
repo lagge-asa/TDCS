@@ -1,0 +1,5941 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "TDCS — 实验室侧定时数据采集服务",
+    "languages": [
+      "Python",
+      "SQL",
+      "HTML/CSS/JS",
+      "YAML"
+    ],
+    "frameworks": [
+      "Flask",
+      "SQLAlchemy",
+      "watchdog",
+      "Pydantic",
+      "prometheus-client"
+    ],
+    "description": "实验室侧定时数据采集服务，监听目录文件变化自动完成Extract→Transform→Load全流程，写入MySQL月分区表",
+    "analyzedAt": "2026-06-04T00:45:24.864Z",
+    "gitCommitHash": "no-git"
+  },
+  "nodes": [
+    {
+      "id": "file:etl-service/src/etl/encryption.py",
+      "type": "file",
+      "name": "encryption.py",
+      "filePath": "etl-service/src/etl/encryption.py",
+      "summary": "基于 Fernet 对称加密的敏感字段加解密模块，密钥从环境变量加载，支持按任务配置加密字段列表。",
+      "tags": [
+        "encryption",
+        "security",
+        "fernet",
+        "data-protection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/etl/encryption.py:Encryption",
+      "type": "class",
+      "name": "Encryption",
+      "filePath": "etl-service/src/etl/encryption.py",
+      "lineRange": [
+        15,
+        68
+      ],
+      "summary": "Fernet 对称加密封装类，提供按字段批量加密/解密能力，密钥仅从环境变量读取，无硬编码。",
+      "tags": [
+        "encryption",
+        "fernet",
+        "security",
+        "field-encryption"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/etl/loader.py",
+      "type": "file",
+      "name": "loader.py",
+      "filePath": "etl-service/src/etl/loader.py",
+      "summary": "ETL 批量加载器，使用 INSERT IGNORE 保证幂等写入，支持 ON DUPLICATE KEY UPDATE 模式，通过 executemany 减少网络往返。",
+      "tags": [
+        "loader",
+        "database",
+        "batch-write",
+        "idempotent",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/etl/loader.py:Loader",
+      "type": "class",
+      "name": "Loader",
+      "filePath": "etl-service/src/etl/loader.py",
+      "lineRange": [
+        21,
+        92
+      ],
+      "summary": "批量数据写入器，提供 INSERT IGNORE 幂等写入和 ON DUPLICATE KEY UPDATE 两种模式，绕过 SQLAlchemy 直接使用 PyMySQL cursor 执行批量写入。",
+      "tags": [
+        "loader",
+        "batch-write",
+        "database",
+        "idempotent"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/infrastructure/cache.py",
+      "type": "file",
+      "name": "cache.py",
+      "filePath": "etl-service/src/infrastructure/cache.py",
+      "summary": "线程安全的本地 TTL + LRU 缓存管理器，无外部依赖，基于 OrderedDict 实现。",
+      "tags": [
+        "cache",
+        "lru",
+        "ttl",
+        "infrastructure",
+        "tested"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/cache.py:CacheManager",
+      "type": "class",
+      "name": "CacheManager",
+      "filePath": "etl-service/src/infrastructure/cache.py",
+      "lineRange": [
+        12,
+        54
+      ],
+      "summary": "线程安全的本地 TTL + LRU 缓存实现，支持容量上限驱逐、TTL 过期清理和线程安全访问。",
+      "tags": [
+        "cache",
+        "lru",
+        "ttl",
+        "thread-safe"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/infrastructure/file_archiver.py",
+      "type": "file",
+      "name": "file_archiver.py",
+      "filePath": "etl-service/src/infrastructure/file_archiver.py",
+      "summary": "文件归档模块，支持跨分区安全移动（copy2+校验+replace）、定期压缩和过期清理，保证数据完整性。",
+      "tags": [
+        "archiver",
+        "file-management",
+        "compression",
+        "infrastructure"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/file_archiver.py:FileArchiver",
+      "type": "class",
+      "name": "FileArchiver",
+      "filePath": "etl-service/src/infrastructure/file_archiver.py",
+      "lineRange": [
+        20,
+        128
+      ],
+      "summary": "文件归档器，处理成功后安全移动文件至归档目录，支持定期压缩和过期清理，跨分区移动使用 copy2+MD5 校验保证完整性。",
+      "tags": [
+        "archiver",
+        "file-management",
+        "compression",
+        "integrity-check"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/infrastructure/ha_elector.py",
+      "type": "file",
+      "name": "ha_elector.py",
+      "filePath": "etl-service/src/infrastructure/ha_elector.py",
+      "summary": "高可用 Leader 选举器，基于 MySQL 乐观锁心跳实现主备切换，支持 standalone 降级和 pause 防脑裂模式。",
+      "tags": [
+        "ha",
+        "leader-election",
+        "failover",
+        "infrastructure"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/ha_elector.py:HAElector",
+      "type": "class",
+      "name": "HAElector",
+      "filePath": "etl-service/src/infrastructure/ha_elector.py",
+      "lineRange": [
+        23,
+        132
+      ],
+      "summary": "基于 MySQL 乐观锁的 Leader 选举器，通过心跳续约和超时抢占实现主备切换，支持 standalone/pause 两种降级模式，使用数据库时间消除时钟偏差。",
+      "tags": [
+        "ha",
+        "leader-election",
+        "heartbeat",
+        "failover"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:etl-service/src/infrastructure/state_tracker.py",
+      "type": "file",
+      "name": "state_tracker.py",
+      "filePath": "etl-service/src/infrastructure/state_tracker.py",
+      "summary": "原子状态机，使用 INSERT ... ON DUPLICATE KEY UPDATE 单条 SQL 实现文件认领，彻底消除先查后写竞态，支持认领超时防死锁。",
+      "tags": [
+        "state-machine",
+        "concurrency",
+        "database",
+        "infrastructure"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/state_tracker.py:StateTracker",
+      "type": "class",
+      "name": "StateTracker",
+      "filePath": "etl-service/src/infrastructure/state_tracker.py",
+      "lineRange": [
+        19,
+        157
+      ],
+      "summary": "文件处理状态追踪器，通过原子 SQL 实现无竞态认领，管理文件从 CLAIMED→PROCESSING→SUCCESS/FAILED/SKIPPED 全生命周期，含认领超时防死锁机制。",
+      "tags": [
+        "state-machine",
+        "concurrency",
+        "database",
+        "atomic-claim"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:etl-service/src/main.py",
+      "type": "file",
+      "name": "main.py",
+      "filePath": "etl-service/src/main.py",
+      "summary": "ETL 服务程序入口，负责初始化并组装所有组件（配置、数据库、缓存、HA、ETL 管线、Web 服务），支持直接运行和 Windows 服务两种启动模式。",
+      "tags": [
+        "entry-point",
+        "bootstrap",
+        "orchestration",
+        "initialization"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:etl-service/src/main.py:bootstrap",
+      "type": "function",
+      "name": "bootstrap",
+      "filePath": "etl-service/src/main.py",
+      "lineRange": [
+        18,
+        119
+      ],
+      "summary": "核心引导函数，按序初始化配置、日志、基础设施层、ETL 组件、Worker 池、HA 选举和 Web 服务，构成完整的应用启动流程。",
+      "tags": [
+        "entry-point",
+        "bootstrap",
+        "initialization",
+        "orchestration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:etl-service/src/monitoring/quality_reporter.py",
+      "type": "file",
+      "name": "quality_reporter.py",
+      "filePath": "etl-service/src/monitoring/quality_reporter.py",
+      "summary": "数据质量评分模块，基于错误率和空值率加权计算质量分数，将评估结果持久化至数据库。",
+      "tags": [
+        "quality",
+        "monitoring",
+        "scoring",
+        "data-validation",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/monitoring/quality_reporter.py:QualityReporter",
+      "type": "class",
+      "name": "QualityReporter",
+      "filePath": "etl-service/src/monitoring/quality_reporter.py",
+      "lineRange": [
+        28,
+        81
+      ],
+      "summary": "数据质量评分器，按公式 score = max(0, 100 - error_rate×60 - null_rate×40) 计算质量分数，支持必填字段空值检测和结果入库。",
+      "tags": [
+        "quality",
+        "scoring",
+        "monitoring",
+        "data-validation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/service.py",
+      "type": "file",
+      "name": "service.py",
+      "filePath": "etl-service/src/service.py",
+      "summary": "Windows 服务封装层，通过 pywin32 将 ETL 服务注册为 Windows 系统服务，支持 sc start/stop 控制，非 Windows 环境降级为直接运行。",
+      "tags": [
+        "service",
+        "windows",
+        "pywin32",
+        "deployment"
+      ],
+      "complexity": "simple",
+      "languageNotes": "使用 try/except ImportError 处理 pywin32 可选依赖，实现跨平台兼容。"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_sculptor/test_cache.py",
+      "type": "file",
+      "name": "test_cache.py",
+      "filePath": "etl-service/tests/unit/test_sculptor/test_cache.py",
+      "summary": "CacheManager 单元测试，覆盖基本存取、TTL 过期、容量驱逐、LRU 顺序、线程安全和删除操作。",
+      "tags": [
+        "test",
+        "cache",
+        "unit-test",
+        "concurrency"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_sculptor/test_loader.py",
+      "type": "file",
+      "name": "test_loader.py",
+      "filePath": "etl-service/tests/unit/test_sculptor/test_loader.py",
+      "summary": "Loader 单元测试，验证 INSERT IGNORE 语句生成、executemany 批量执行、空输入返回零和 rowcount 返回值正确性。",
+      "tags": [
+        "test",
+        "loader",
+        "unit-test",
+        "database"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_sculptor/test_loader.py:make_db",
+      "type": "function",
+      "name": "make_db",
+      "filePath": "etl-service/tests/unit/test_sculptor/test_loader.py",
+      "lineRange": [
+        6,
+        20
+      ],
+      "summary": "构造带原生 DBAPI cursor mock 的数据库对象，用于 Loader 测试中模拟 SQLAlchemy 连接层级结构。",
+      "tags": [
+        "test",
+        "mock",
+        "utility",
+        "database"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_sculptor/test_quality_reporter.py",
+      "type": "file",
+      "name": "test_quality_reporter.py",
+      "filePath": "etl-service/tests/unit/test_sculptor/test_quality_reporter.py",
+      "summary": "QualityReporter 单元测试，覆盖无错误满分、50% 错误率、错误+空值组合、全错误和空输入等评分场景。",
+      "tags": [
+        "test",
+        "quality",
+        "unit-test",
+        "scoring"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/core/exceptions.py",
+      "type": "file",
+      "name": "exceptions.py",
+      "filePath": "etl-service/src/core/exceptions.py",
+      "summary": "ETL 服务异常分类体系，定义了可重试错误、致命错误、跳过文件、数据质量错误、配置校验错误和沙箱错误六种异常类型，以及重试退避策略常量。",
+      "tags": [
+        "异常体系",
+        "核心模块",
+        "错误处理",
+        "etl",
+        "tested"
+      ],
+      "complexity": "simple",
+      "languageNotes": "使用 Python 异常继承链实现分类：SandboxError 继承 FatalError，所有异常均继承 ETLError 基类，便于按粒度捕获。"
+    },
+    {
+      "id": "class:etl-service/src/core/exceptions.py:ETLError",
+      "type": "class",
+      "name": "ETLError",
+      "filePath": "etl-service/src/core/exceptions.py",
+      "lineRange": [
+        17,
+        19
+      ],
+      "summary": "ETL 服务基础异常类，所有自定义异常的根，便于统一捕获 ETL 相关错误。",
+      "tags": [
+        "异常体系",
+        "基类"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/exceptions.py:RetryableError",
+      "type": "class",
+      "name": "RetryableError",
+      "filePath": "etl-service/src/core/exceptions.py",
+      "lineRange": [
+        22,
+        26
+      ],
+      "summary": "可重试错误，用于网络超时、数据库连接断开等临时故障，按退避策略重试。",
+      "tags": [
+        "异常体系",
+        "可重试"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/exceptions.py:FatalError",
+      "type": "class",
+      "name": "FatalError",
+      "filePath": "etl-service/src/core/exceptions.py",
+      "lineRange": [
+        29,
+        33
+      ],
+      "summary": "不可重试的致命错误，用于配置错误、SQL 语法错误等不可恢复故障，进死信目录并触发告警。",
+      "tags": [
+        "异常体系",
+        "致命错误"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/exceptions.py:SkipFileError",
+      "type": "class",
+      "name": "SkipFileError",
+      "filePath": "etl-service/src/core/exceptions.py",
+      "lineRange": [
+        36,
+        40
+      ],
+      "summary": "跳过文件错误，用于空文件、格式不支持或已处理文件，标记 SKIPPED 不重试不入死信。",
+      "tags": [
+        "异常体系",
+        "文件跳过"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/exceptions.py:SandboxError",
+      "type": "class",
+      "name": "SandboxError",
+      "filePath": "etl-service/src/core/exceptions.py",
+      "lineRange": [
+        57,
+        61
+      ],
+      "summary": "沙箱执行错误，继承 FatalError，用于清洗代码语法错误、超时或非法返回值等不可重试场景。",
+      "tags": [
+        "异常体系",
+        "沙箱",
+        "致命错误"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/core/pipeline.py",
+      "type": "file",
+      "name": "pipeline.py",
+      "filePath": "etl-service/src/core/pipeline.py",
+      "summary": "流式 ETL Pipeline 编排器，逐 batch 执行 Extract→Transform→Load 流程，全程不积累全量数据，支持加密、路由、质量报告和多种异常处理。",
+      "tags": [
+        "etl",
+        "流式处理",
+        "管道编排",
+        "核心模块",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "使用 zip_longest 对齐原始行与转换行，哨兵值 _MISSING 检测 transform 返回行数不足的情况，确保错误行不丢失。"
+    },
+    {
+      "id": "class:etl-service/src/core/pipeline.py:ETLPipeline",
+      "type": "class",
+      "name": "ETLPipeline",
+      "filePath": "etl-service/src/core/pipeline.py",
+      "lineRange": [
+        38,
+        121
+      ],
+      "summary": "ETL 管道核心类，协调提取器、沙箱、路由器、加载器和加密模块，逐 batch 流式执行并处理各类异常。",
+      "tags": [
+        "etl",
+        "管道编排",
+        "流式处理"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:etl-service/src/core/pipeline.py:execute",
+      "type": "function",
+      "name": "execute",
+      "filePath": "etl-service/src/core/pipeline.py",
+      "lineRange": [
+        48,
+        121
+      ],
+      "summary": "执行 ETL 管道，流式逐批提取、转换、加密、路由和加载数据，处理 SkipFileError/RetryableError/FatalError 三类异常并生成质量报告。",
+      "tags": [
+        "etl",
+        "执行入口",
+        "流式处理"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:etl-service/src/core/pipeline.py:PipelineStatus",
+      "type": "class",
+      "name": "PipelineStatus",
+      "filePath": "etl-service/src/core/pipeline.py",
+      "lineRange": [
+        20,
+        24
+      ],
+      "summary": "管道执行状态枚举，包含 SUCCESS、FAILED、SKIPPED、RETRY 四种状态。",
+      "tags": [
+        "枚举",
+        "状态",
+        "管道"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/pipeline.py:PipelineResult",
+      "type": "class",
+      "name": "PipelineResult",
+      "filePath": "etl-service/src/core/pipeline.py",
+      "lineRange": [
+        28,
+        35
+      ],
+      "summary": "管道执行结果数据类，记录状态、原始行数、有效行数、错误行数、耗时、异常和质量报告。",
+      "tags": [
+        "数据类",
+        "结果",
+        "管道"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/etl/extractor.py",
+      "type": "file",
+      "name": "extractor.py",
+      "filePath": "etl-service/src/etl/extractor.py",
+      "summary": "流式文件解析器，支持 CSV/JSON/Excel 逐批 yield，内存上限由 batch_size 控制，编码检测采用头部+中部各 32KB 采样策略。",
+      "tags": [
+        "etl",
+        "数据提取",
+        "流式解析",
+        "编码检测",
+        "tested"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "使用 chardet 库进行编码自动检测，采样头部和中部各 32KB 避免读取全文件；ijson 用于流式 JSON 解析。"
+    },
+    {
+      "id": "class:etl-service/src/etl/extractor.py:StreamingExtractor",
+      "type": "class",
+      "name": "StreamingExtractor",
+      "filePath": "etl-service/src/etl/extractor.py",
+      "lineRange": [
+        18,
+        105
+      ],
+      "summary": "流式提取器，根据文件扩展名自动选择 CSV/JSON/Excel 解析策略，逐批 yield 数据行。",
+      "tags": [
+        "etl",
+        "流式解析",
+        "数据提取"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/etl/extractor.py:stream",
+      "type": "function",
+      "name": "stream",
+      "filePath": "etl-service/src/etl/extractor.py",
+      "lineRange": [
+        19,
+        38
+      ],
+      "summary": "统一流式接口，根据文件扩展名自动选择 CSV/JSON/Excel 解析策略，逐批 yield 数据。",
+      "tags": [
+        "etl",
+        "流式解析",
+        "入口方法"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "file",
+      "name": "transform_sandbox.py",
+      "filePath": "etl-service/src/etl/transform_sandbox.py",
+      "summary": "子进程沙箱执行器，在独立子进程中运行清洗代码，通过空环境变量防止密钥泄露，支持超时终止和语法预检。",
+      "tags": [
+        "etl",
+        "沙箱",
+        "安全隔离",
+        "数据转换",
+        "tested"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "通过 subprocess.Popen 的 env={} 参数阻止子进程继承父进程环境变量（如 DB_PASSWORD），Windows 下 memory_mb 仅声明不强制。"
+    },
+    {
+      "id": "class:etl-service/src/etl/transform_sandbox.py:TransformSandbox",
+      "type": "class",
+      "name": "TransformSandbox",
+      "filePath": "etl-service/src/etl/transform_sandbox.py",
+      "lineRange": [
+        25,
+        98
+      ],
+      "summary": "清洗代码沙箱执行器，通过子进程隔离执行用户自定义清洗逻辑，支持超时终止、返回值校验和语法预检。",
+      "tags": [
+        "etl",
+        "沙箱",
+        "安全隔离"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/etl/transform_sandbox.py:transform_batch",
+      "type": "function",
+      "name": "transform_batch",
+      "filePath": "etl-service/src/etl/transform_sandbox.py",
+      "lineRange": [
+        29,
+        80
+      ],
+      "summary": "在子进程中执行清洗代码，通过 stdin/stdout 传递 JSON 数据，超时后先 terminate 再 kill 确保资源释放，返回值必须为 list。",
+      "tags": [
+        "etl",
+        "沙箱执行",
+        "安全隔离"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/etl/transform_sandbox.py:validate_syntax",
+      "type": "function",
+      "name": "validate_syntax",
+      "filePath": "etl-service/src/etl/transform_sandbox.py",
+      "lineRange": [
+        83,
+        98
+      ],
+      "summary": "静态语法检查方法，使用 py_compile 编译临时文件验证语法，不执行代码。",
+      "tags": [
+        "etl",
+        "语法校验",
+        "安全"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/infrastructure/database.py",
+      "type": "file",
+      "name": "database.py",
+      "filePath": "etl-service/src/infrastructure/database.py",
+      "summary": "数据库连接池管理器，基于 SQLAlchemy 实现读写分离，主库用于写操作，从库随机选择用于读操作，从库故障自动降级到主库。",
+      "tags": [
+        "数据库",
+        "连接池",
+        "读写分离",
+        "基础设施"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "使用 SQLAlchemy QueuePool 和 pool_pre_ping 自动检测断开连接，从库采用随机选择策略实现简单负载均衡。"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/database.py:DatabaseManager",
+      "type": "class",
+      "name": "DatabaseManager",
+      "filePath": "etl-service/src/infrastructure/database.py",
+      "lineRange": [
+        23,
+        102
+      ],
+      "summary": "数据库连接池管理器，支持主从读写分离，从库故障自动降级到主库，提供健康检查和连接池释放。",
+      "tags": [
+        "数据库",
+        "连接池",
+        "读写分离"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/web/api/cleaners.py",
+      "type": "file",
+      "name": "cleaners.py",
+      "filePath": "etl-service/src/web/api/cleaners.py",
+      "summary": "清洗代码管理 API，提供测试清洗器执行和语法校验两个端点，需要 operator 权限认证。",
+      "tags": [
+        "api-handler",
+        "web接口",
+        "清洗代码"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/cleaners.py:test_cleaner",
+      "type": "function",
+      "name": "test_cleaner",
+      "filePath": "etl-service/src/web/api/cleaners.py",
+      "lineRange": [
+        12,
+        21
+      ],
+      "summary": "测试清洗器端点，在沙箱中执行指定清洗模块的 transform 函数并返回结果。",
+      "tags": [
+        "api-handler",
+        "测试",
+        "清洗代码"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/cleaners.py:validate_cleaner",
+      "type": "function",
+      "name": "validate_cleaner",
+      "filePath": "etl-service/src/web/api/cleaners.py",
+      "lineRange": [
+        26,
+        30
+      ],
+      "summary": "清洗器语法校验端点，使用 TransformSandbox.validate_syntax 静态检查代码语法。",
+      "tags": [
+        "api-handler",
+        "语法校验",
+        "清洗代码"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_foundation/test_exceptions.py",
+      "type": "file",
+      "name": "test_exceptions.py",
+      "filePath": "etl-service/tests/unit/test_foundation/test_exceptions.py",
+      "summary": "异常体系单元测试，验证异常继承层次、重试退避常量值、基类可捕获性和异常消息内容。",
+      "tags": [
+        "test",
+        "异常体系",
+        "单元测试"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_pipeline/test_extractor.py",
+      "type": "file",
+      "name": "test_extractor.py",
+      "filePath": "etl-service/tests/unit/test_pipeline/test_extractor.py",
+      "summary": "流式提取器单元测试，验证 CSV 分批解析、总行数统计、空文件/缺失文件/不支持格式抛 SkipFileError，以及编码检测采样策略。",
+      "tags": [
+        "test",
+        "数据提取",
+        "单元测试"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_pipeline/test_pipeline.py",
+      "type": "file",
+      "name": "test_pipeline.py",
+      "filePath": "etl-service/tests/unit/test_pipeline/test_pipeline.py",
+      "summary": "ETL 管道单元测试，验证正常流程、SkipFileError/RetryableError/FatalError 异常处理、多批处理和耗时统计。",
+      "tags": [
+        "test",
+        "管道编排",
+        "单元测试"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_pipeline/test_sandbox.py",
+      "type": "file",
+      "name": "test_sandbox.py",
+      "filePath": "etl-service/tests/unit/test_pipeline/test_sandbox.py",
+      "summary": "沙箱执行器单元测试，验证正常转换、环境变量隔离、超时重试、非法返回值报错，以及语法校验和安全性。",
+      "tags": [
+        "test",
+        "沙箱",
+        "单元测试"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/web/api/config_api.py",
+      "type": "file",
+      "name": "config_api.py",
+      "filePath": "etl-service/src/web/api/config_api.py",
+      "summary": "配置管理 API 蓝图，提供系统配置的只读查询和管理员级别的配置重载接口。",
+      "tags": [
+        "api-handler",
+        "配置",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/config_api.py:get_config",
+      "type": "function",
+      "name": "get_config",
+      "filePath": "etl-service/src/web/api/config_api.py",
+      "lineRange": [
+        10,
+        17
+      ],
+      "summary": "返回当前系统配置的实例 ID、日志级别和工作线程数等信息，需要 viewer 权限。",
+      "tags": [
+        "api-handler",
+        "只读",
+        "查询"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/config_api.py:reload_config",
+      "type": "function",
+      "name": "reload_config",
+      "filePath": "etl-service/src/web/api/config_api.py",
+      "lineRange": [
+        22,
+        25
+      ],
+      "summary": "触发配置管理器重新加载配置，需要 admin 权限。",
+      "tags": [
+        "api-handler",
+        "配置",
+        "管理操作"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/web/api/files.py",
+      "type": "file",
+      "name": "files.py",
+      "filePath": "etl-service/src/web/api/files.py",
+      "summary": "文件处理状态 API 蓝图，提供已处理文件的分页查询和失败文件重试接口。",
+      "tags": [
+        "api-handler",
+        "文件管理",
+        "routing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/web/api/files.py:list_files",
+      "type": "function",
+      "name": "list_files",
+      "filePath": "etl-service/src/web/api/files.py",
+      "lineRange": [
+        11,
+        36
+      ],
+      "summary": "分页查询已处理文件列表，支持按状态过滤，从数据库读取 processed_files 表数据。",
+      "tags": [
+        "api-handler",
+        "分页查询",
+        "数据库访问"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/web/api/files.py:retry_file",
+      "type": "function",
+      "name": "retry_file",
+      "filePath": "etl-service/src/web/api/files.py",
+      "lineRange": [
+        41,
+        52
+      ],
+      "summary": "将指定文件的处理状态重置为 PENDING 以触发重试，需要 operator 权限。",
+      "tags": [
+        "api-handler",
+        "重试",
+        "数据库访问"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/web/api/quality.py",
+      "type": "file",
+      "name": "quality.py",
+      "filePath": "etl-service/src/web/api/quality.py",
+      "summary": "数据质量报告 API 蓝图，按任务 ID 查询数据质量报告。",
+      "tags": [
+        "api-handler",
+        "数据质量",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/quality.py:get_quality",
+      "type": "function",
+      "name": "get_quality",
+      "filePath": "etl-service/src/web/api/quality.py",
+      "lineRange": [
+        10,
+        11
+      ],
+      "summary": "根据任务 ID 返回对应的数据质量报告，当前为占位实现。",
+      "tags": [
+        "api-handler",
+        "数据质量",
+        "查询"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/web/api/system.py",
+      "type": "file",
+      "name": "system.py",
+      "filePath": "etl-service/src/web/api/system.py",
+      "summary": "系统级 API 蓝图，提供健康检查、Prometheus 指标暴露和用户登录认证接口。",
+      "tags": [
+        "api-handler",
+        "认证",
+        "监控"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/web/api/system.py:health",
+      "type": "function",
+      "name": "health",
+      "filePath": "etl-service/src/web/api/system.py",
+      "lineRange": [
+        10,
+        12
+      ],
+      "summary": "健康检查端点，无需认证，返回服务状态信息。",
+      "tags": [
+        "api-handler",
+        "健康检查",
+        "无认证"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/system.py:metrics",
+      "type": "function",
+      "name": "metrics",
+      "filePath": "etl-service/src/web/api/system.py",
+      "lineRange": [
+        16,
+        24
+      ],
+      "summary": "Prometheus 格式指标暴露端点，导出应用运行时指标。",
+      "tags": [
+        "api-handler",
+        "监控",
+        "prometheus"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/system.py:login",
+      "type": "function",
+      "name": "login",
+      "filePath": "etl-service/src/web/api/system.py",
+      "lineRange": [
+        28,
+        58
+      ],
+      "summary": "用户登录认证接口，验证用户名密码后签发 JWT 令牌并更新最后登录时间。",
+      "tags": [
+        "api-handler",
+        "认证",
+        "JWT"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/web/api/tasks.py",
+      "type": "file",
+      "name": "tasks.py",
+      "filePath": "etl-service/src/web/api/tasks.py",
+      "summary": "任务管理 API 蓝图，提供任务列表查询及任务的暂停、恢复和手动触发操作。",
+      "tags": [
+        "api-handler",
+        "任务管理",
+        "routing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/web/api/tasks.py:list_tasks",
+      "type": "function",
+      "name": "list_tasks",
+      "filePath": "etl-service/src/web/api/tasks.py",
+      "lineRange": [
+        10,
+        16
+      ],
+      "summary": "返回所有任务的 ID、名称和启用状态列表，需要 viewer 权限。",
+      "tags": [
+        "api-handler",
+        "只读",
+        "查询"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/tasks.py:_get_tm_or_404",
+      "type": "function",
+      "name": "_get_tm_or_404",
+      "filePath": "etl-service/src/web/api/tasks.py",
+      "lineRange": [
+        19,
+        24
+      ],
+      "summary": "内部辅助函数，从应用上下文获取任务管理器和配置管理器，验证任务存在性后返回或 404。",
+      "tags": [
+        "utility",
+        "辅助函数",
+        "验证"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/tasks.py:pause_task",
+      "type": "function",
+      "name": "pause_task",
+      "filePath": "etl-service/src/web/api/tasks.py",
+      "lineRange": [
+        29,
+        33
+      ],
+      "summary": "暂停指定任务的执行，需要 operator 权限。",
+      "tags": [
+        "api-handler",
+        "任务控制",
+        "管理操作"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/tasks.py:resume_task",
+      "type": "function",
+      "name": "resume_task",
+      "filePath": "etl-service/src/web/api/tasks.py",
+      "lineRange": [
+        38,
+        42
+      ],
+      "summary": "恢复指定任务的执行，需要 operator 权限。",
+      "tags": [
+        "api-handler",
+        "任务控制",
+        "管理操作"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/tasks.py:trigger_task",
+      "type": "function",
+      "name": "trigger_task",
+      "filePath": "etl-service/src/web/api/tasks.py",
+      "lineRange": [
+        47,
+        51
+      ],
+      "summary": "手动触发指定任务的立即执行，需要 operator 权限。",
+      "tags": [
+        "api-handler",
+        "任务控制",
+        "手动触发"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/web/api/users.py",
+      "type": "file",
+      "name": "users.py",
+      "filePath": "etl-service/src/web/api/users.py",
+      "summary": "用户管理 API 蓝图，提供用户列表查询和用户删除操作，均需 admin 权限。",
+      "tags": [
+        "api-handler",
+        "用户管理",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/users.py:list_users",
+      "type": "function",
+      "name": "list_users",
+      "filePath": "etl-service/src/web/api/users.py",
+      "lineRange": [
+        10,
+        11
+      ],
+      "summary": "返回用户列表，当前为占位实现，需要 admin 权限。",
+      "tags": [
+        "api-handler",
+        "只读",
+        "管理操作"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/api/users.py:delete_user",
+      "type": "function",
+      "name": "delete_user",
+      "filePath": "etl-service/src/web/api/users.py",
+      "lineRange": [
+        16,
+        17
+      ],
+      "summary": "删除指定用户，当前为占位实现，需要 admin 权限。",
+      "tags": [
+        "api-handler",
+        "删除",
+        "管理操作"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/web/app.py",
+      "type": "file",
+      "name": "app.py",
+      "filePath": "etl-service/src/web/app.py",
+      "summary": "Flask 应用工厂模块，负责创建应用实例、配置速率限制、注入依赖并注册所有 API 蓝图，同时提供 waitress 生产服务器启动入口。",
+      "tags": [
+        "entry-point",
+        "factory",
+        "配置"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "采用 Flask 应用工厂模式 (create_app)，通过延迟初始化避免循环导入，并使用 waitress 作为生产 WSGI 服务器。"
+    },
+    {
+      "id": "function:etl-service/src/web/app.py:create_app",
+      "type": "function",
+      "name": "create_app",
+      "filePath": "etl-service/src/web/app.py",
+      "lineRange": [
+        13,
+        65
+      ],
+      "summary": "Flask 应用工厂函数，初始化应用配置、速率限制器、依赖注入和所有 API 蓝图注册。",
+      "tags": [
+        "factory",
+        "entry-point",
+        "配置",
+        "初始化"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/web/app.py:run_server",
+      "type": "function",
+      "name": "run_server",
+      "filePath": "etl-service/src/web/app.py",
+      "lineRange": [
+        68,
+        72
+      ],
+      "summary": "使用 waitress 生产服务器启动 Flask 应用，支持多线程配置。",
+      "tags": [
+        "utility",
+        "服务器启动",
+        "生产部署"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/web/auth.py",
+      "type": "file",
+      "name": "auth.py",
+      "filePath": "etl-service/src/web/auth.py",
+      "summary": "JWT 认证与 RBAC 权限控制模块，提供令牌签发和基于角色的请求认证装饰器，实现三级权限体系 (admin > operator > viewer)。",
+      "tags": [
+        "middleware",
+        "认证",
+        "权限控制"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "使用 JWT 存储于 Authorization Header，天然免疫 CSRF；通过装饰器模式实现 require_auth，支持最小角色级别参数。"
+    },
+    {
+      "id": "function:etl-service/src/web/auth.py:generate_token",
+      "type": "function",
+      "name": "generate_token",
+      "filePath": "etl-service/src/web/auth.py",
+      "lineRange": [
+        20,
+        33
+      ],
+      "summary": "签发 JWT 令牌，包含用户 ID、用户名、角色和过期时间等声明。",
+      "tags": [
+        "认证",
+        "JWT",
+        "令牌签发"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "function",
+      "name": "require_auth",
+      "filePath": "etl-service/src/web/auth.py",
+      "lineRange": [
+        36,
+        63
+      ],
+      "summary": "认证与权限装饰器工厂，验证 JWT 令牌有效性并检查用户角色是否满足最低权限要求。",
+      "tags": [
+        "middleware",
+        "认证",
+        "权限控制",
+        "装饰器"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/core/config.py",
+      "type": "file",
+      "name": "config.py",
+      "filePath": "etl-service/src/core/config.py",
+      "summary": "配置管理器模块，基于 frozen dataclass 实现配置的原子替换和热加载机制，支持环境变量替换和变更监听器通知。",
+      "tags": [
+        "配置",
+        "热加载",
+        "核心模块",
+        "factory",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "采用 frozen dataclass + 原子引用替换实现配置不可变性和线程安全的热加载；通过线程锁保护监听器列表的读写，配置对象本身无需加锁。"
+    },
+    {
+      "id": "class:etl-service/src/core/config.py:ConfigManager",
+      "type": "class",
+      "name": "ConfigManager",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        33,
+        279
+      ],
+      "summary": "配置管理器核心类，负责 YAML 配置文件的读取、校验、构建不可变配置对象及热加载替换，支持注册变更监听器。",
+      "tags": [
+        "配置",
+        "热加载",
+        "管理器",
+        "单例"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager.__init__",
+      "type": "function",
+      "name": "ConfigManager.__init__",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        36,
+        40
+      ],
+      "summary": "初始化配置管理器，设置配置文件路径、线程锁和变更监听器列表。",
+      "tags": [
+        "初始化",
+        "配置"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager.load",
+      "type": "function",
+      "name": "ConfigManager.load",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        42,
+        51
+      ],
+      "summary": "初始加载配置文件，读取 YAML、校验、构建不可变配置对象，校验失败则抛出异常阻止启动。",
+      "tags": [
+        "加载",
+        "配置",
+        "启动"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager.reload",
+      "type": "function",
+      "name": "ConfigManager.reload",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        53,
+        78
+      ],
+      "summary": "热加载配置：校验新配置通过后原子替换，通知所有监听器；校验或监听器异常时保留旧配置。",
+      "tags": [
+        "热加载",
+        "配置",
+        "原子替换"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager.config",
+      "type": "function",
+      "name": "ConfigManager.config",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        80,
+        85
+      ],
+      "summary": "配置属性访问器，返回当前不可变配置对象，未加载时抛出异常。",
+      "tags": [
+        "属性访问",
+        "配置"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager.add_listener",
+      "type": "function",
+      "name": "ConfigManager.add_listener",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        87,
+        88
+      ],
+      "summary": "注册配置变更监听器，热加载成功后接收新旧配置对象回调。",
+      "tags": [
+        "监听器",
+        "观察者模式"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager.get_task",
+      "type": "function",
+      "name": "ConfigManager.get_task",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        90,
+        94
+      ],
+      "summary": "按 task_id 查找并返回对应的任务配置对象，不存在则返回 None。",
+      "tags": [
+        "查询",
+        "任务配置"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager._read_yaml",
+      "type": "function",
+      "name": "ConfigManager._read_yaml",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        98,
+        120
+      ],
+      "summary": "读取 YAML 配置文件并替换环境变量引用 (${VAR})，内置变量 HOSTNAME/PID 保留原样交由后续处理。",
+      "tags": [
+        "文件读取",
+        "环境变量",
+        "YAML"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "type": "function",
+      "name": "ConfigManager._build",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        122,
+        169
+      ],
+      "summary": "将原始配置字典解析并构建为不可变 AppConfig 对象，包含数据库 DSN、缓存、加密、HA、Web 及任务等全部子配置。",
+      "tags": [
+        "构建",
+        "配置解析",
+        "工厂方法"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager._build_dsn",
+      "type": "function",
+      "name": "ConfigManager._build_dsn",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        171,
+        179
+      ],
+      "summary": "根据数据库节点配置构建 MySQL 连接 DSN 字符串，对用户名和密码进行 URL 编码。",
+      "tags": [
+        "工具函数",
+        "数据库",
+        "DSN"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager._build_cache",
+      "type": "function",
+      "name": "ConfigManager._build_cache",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        181,
+        197
+      ],
+      "summary": "解析缓存配置，构建包含本地缓存和 Redis 缓存的不可变 CacheConfig 对象。",
+      "tags": [
+        "构建",
+        "缓存配置"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager._build_monitoring",
+      "type": "function",
+      "name": "ConfigManager._build_monitoring",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        199,
+        226
+      ],
+      "summary": "解析监控配置，构建包含 Prometheus 和告警规则的不可变 MonitoringConfig 对象。",
+      "tags": [
+        "构建",
+        "监控配置"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager._build_task",
+      "type": "function",
+      "name": "ConfigManager._build_task",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        228,
+        270
+      ],
+      "summary": "将单个任务的原始配置字典解析为不可变 TaskConfig 对象，涵盖监控、ETL、表、错误处理和归档等所有子配置。",
+      "tags": [
+        "构建",
+        "任务配置"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/core/config.py:ConfigManager._resolve_instance_id",
+      "type": "function",
+      "name": "ConfigManager._resolve_instance_id",
+      "filePath": "etl-service/src/core/config.py",
+      "lineRange": [
+        272,
+        279
+      ],
+      "summary": "静态方法，解析 instance_id 模板中的 ${HOSTNAME} 和 ${PID} 占位符为实际运行时值。",
+      "tags": [
+        "模板解析",
+        "实例标识"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/core/config_models.py",
+      "type": "file",
+      "name": "config_models.py",
+      "filePath": "etl-service/src/core/config_models.py",
+      "summary": "不可变配置数据模型定义，所有类均为 frozen dataclass，热加载时创建新对象并原子替换引用，tasks 使用 tuple 保证不可变性。",
+      "tags": [
+        "数据模型",
+        "配置",
+        "不可变"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "采用 @dataclass(frozen=True) 确保配置对象一旦创建不可修改，热加载通过创建全新对象并原子替换引用实现，避免并发读写问题。"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:TaskConfig",
+      "type": "class",
+      "name": "TaskConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        14,
+        50
+      ],
+      "summary": "单个 ETL 任务的不可变配置，包含监控、提取、转换、加载、错误处理和归档等全部参数。",
+      "tags": [
+        "数据模型",
+        "任务配置",
+        "不可变"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:HAConfig",
+      "type": "class",
+      "name": "HAConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        54,
+        58
+      ],
+      "summary": "高可用配置，包含心跳间隔、故障转移超时和降级模式参数。",
+      "tags": [
+        "数据模型",
+        "高可用",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:WebConfig",
+      "type": "class",
+      "name": "WebConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        61,
+        70
+      ],
+      "summary": "Web 服务配置，包含监听地址、端口、密钥、令牌过期和速率限制等参数。",
+      "tags": [
+        "数据模型",
+        "Web配置",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:EncryptionConfig",
+      "type": "class",
+      "name": "EncryptionConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        73,
+        77
+      ],
+      "summary": "加密配置，包含启用标志、算法和环境变量密钥名称。",
+      "tags": [
+        "数据模型",
+        "加密",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:CacheLocalConfig",
+      "type": "class",
+      "name": "CacheLocalConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        80,
+        84
+      ],
+      "summary": "本地缓存配置，包含启用标志、最大容量和 TTL。",
+      "tags": [
+        "数据模型",
+        "缓存",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:CacheRedisConfig",
+      "type": "class",
+      "name": "CacheRedisConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        87,
+        93
+      ],
+      "summary": "Redis 缓存配置，包含连接地址、端口、密码和数据库编号。",
+      "tags": [
+        "数据模型",
+        "Redis",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:CacheConfig",
+      "type": "class",
+      "name": "CacheConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        96,
+        99
+      ],
+      "summary": "组合缓存配置，包含本地缓存和 Redis 缓存两个子配置。",
+      "tags": [
+        "数据模型",
+        "缓存",
+        "组合模式"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:AlertingRuleConfig",
+      "type": "class",
+      "name": "AlertingRuleConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        102,
+        106
+      ],
+      "summary": "告警规则配置，定义失败文件阈值、最低质量分数和最大队列大小。",
+      "tags": [
+        "数据模型",
+        "告警",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:AlertingChannelConfig",
+      "type": "class",
+      "name": "AlertingChannelConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        109,
+        113
+      ],
+      "summary": "告警通道配置，包含通道类型、Webhook 地址和密钥。",
+      "tags": [
+        "数据模型",
+        "告警通道",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:AlertingConfig",
+      "type": "class",
+      "name": "AlertingConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        116,
+        120
+      ],
+      "summary": "告警配置，包含启用标志、告警通道列表和告警规则。",
+      "tags": [
+        "数据模型",
+        "告警",
+        "组合模式"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:PrometheusConfig",
+      "type": "class",
+      "name": "PrometheusConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        123,
+        126
+      ],
+      "summary": "Prometheus 监控配置，包含启用标志和暴露端口。",
+      "tags": [
+        "数据模型",
+        "Prometheus",
+        "不可变"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:MonitoringConfig",
+      "type": "class",
+      "name": "MonitoringConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        129,
+        132
+      ],
+      "summary": "监控配置，组合 Prometheus 和告警两个子配置。",
+      "tags": [
+        "数据模型",
+        "监控",
+        "组合模式"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_models.py:AppConfig",
+      "type": "class",
+      "name": "AppConfig",
+      "filePath": "etl-service/src/core/config_models.py",
+      "lineRange": [
+        135,
+        154
+      ],
+      "summary": "应用全局不可变配置，包含实例标识、数据库 DSN、缓存、并发、加密、高可用、Web、监控和任务列表等全部配置项。",
+      "tags": [
+        "数据模型",
+        "全局配置",
+        "不可变",
+        "根配置"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/core/config_validator.py",
+      "type": "file",
+      "name": "config_validator.py",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "summary": "配置校验模块，基于 Pydantic v1 定义完整的配置 Schema，提供多维度校验（格式、语义、跨字段约束）并返回错误列表。",
+      "tags": [
+        "配置校验",
+        "Pydantic",
+        "核心模块",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "使用 Pydantic v1 的 BaseModel + validator 装饰器实现声明式校验；_normalize_raw 处理 YAML 字段名映射（type→kind）；validate_config 额外执行跨字段语义校验（HA 需要 slave、task_id 不重复）。"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:ServiceConfigSchema",
+      "type": "class",
+      "name": "ServiceConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        13,
+        22
+      ],
+      "summary": "服务配置校验 Schema，校验实例 ID 和日志级别的合法取值。",
+      "tags": [
+        "校验Schema",
+        "服务配置"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:DatabaseNodeSchema",
+      "type": "class",
+      "name": "DatabaseNodeSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        25,
+        36
+      ],
+      "summary": "数据库节点校验 Schema，校验连接参数的端口范围、连接池大小和超时等约束。",
+      "tags": [
+        "校验Schema",
+        "数据库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:CacheConfigSchema",
+      "type": "class",
+      "name": "CacheConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        52,
+        54
+      ],
+      "summary": "缓存配置校验 Schema，组合本地缓存和 Redis 缓存的校验。",
+      "tags": [
+        "校验Schema",
+        "缓存"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:ConcurrencyConfigSchema",
+      "type": "class",
+      "name": "ConcurrencyConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        57,
+        59
+      ],
+      "summary": "并发配置校验 Schema，约束工作线程数、队列大小和任务超时范围。",
+      "tags": [
+        "校验Schema",
+        "并发"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:HAConfigSchema",
+      "type": "class",
+      "name": "HAConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        69,
+        79
+      ],
+      "summary": "高可用配置校验 Schema，约束心跳间隔、故障转移超时和降级模式合法取值。",
+      "tags": [
+        "校验Schema",
+        "高可用"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:WebConfigSchema",
+      "type": "class",
+      "name": "WebConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        82,
+        97
+      ],
+      "summary": "Web 配置校验 Schema，校验端口、令牌过期时间和服务器类型（waitress/development）。",
+      "tags": [
+        "校验Schema",
+        "Web"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:AlertingConfigSchema",
+      "type": "class",
+      "name": "AlertingConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        122,
+        125
+      ],
+      "summary": "告警配置校验 Schema，组合告警通道和告警规则的校验。",
+      "tags": [
+        "校验Schema",
+        "告警"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:TaskConfigSchema",
+      "type": "class",
+      "name": "TaskConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        207,
+        224
+      ],
+      "summary": "任务配置校验 Schema，校验 task_id 命名规范和嵌套的监控、ETL、表、错误处理等子配置。",
+      "tags": [
+        "校验Schema",
+        "任务配置"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "type": "class",
+      "name": "AppConfigSchema",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        227,
+        236
+      ],
+      "summary": "顶层应用配置校验 Schema，组合所有子配置校验并要求至少一个任务。",
+      "tags": [
+        "校验Schema",
+        "应用配置",
+        "根Schema"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/core/config_validator.py:_normalize_raw",
+      "type": "function",
+      "name": "_normalize_raw",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        239,
+        249
+      ],
+      "summary": "将 YAML 配置中 alerting.channels[].type 字段映射为 kind，以适配 Pydantic Schema 的字段名。",
+      "tags": [
+        "工具函数",
+        "字段映射",
+        "配置预处理"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "function",
+      "name": "validate_config",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        252,
+        287
+      ],
+      "summary": "配置校验入口函数，执行 Pydantic Schema 校验和跨字段语义校验（master 必需、HA 需 slave、task_id 不重复），返回错误列表。",
+      "tags": [
+        "校验入口",
+        "配置",
+        "语义校验"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/core/config_validator.py:validate_standalone_single_node",
+      "type": "function",
+      "name": "validate_standalone_single_node",
+      "filePath": "etl-service/src/core/config_validator.py",
+      "lineRange": [
+        290,
+        291
+      ],
+      "summary": "独立单节点模式校验占位函数，当前始终返回 None。",
+      "tags": [
+        "校验",
+        "单节点",
+        "占位"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/conftest.py",
+      "type": "file",
+      "name": "conftest.py",
+      "filePath": "etl-service/tests/conftest.py",
+      "summary": "pytest 全局 fixtures 定义，提供最小化配置字典、临时配置文件和已加载的 ConfigManager 实例等测试夹具。",
+      "tags": [
+        "测试",
+        "fixtures",
+        "pytest"
+      ],
+      "complexity": "simple",
+      "languageNotes": "conftest.py 是 pytest 的自动发现机制，其中定义的 fixtures 可被同目录及子目录的所有测试模块使用，无需显式导入。"
+    },
+    {
+      "id": "function:etl-service/tests/conftest.py:minimal_config_dict",
+      "type": "function",
+      "name": "minimal_config_dict",
+      "filePath": "etl-service/tests/conftest.py",
+      "lineRange": [
+        40,
+        42
+      ],
+      "summary": "测试夹具，返回最小化的合法配置字典，包含服务、数据库、Web 和一个任务的基础配置。",
+      "tags": [
+        "测试",
+        "fixture",
+        "配置"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/conftest.py:config_file",
+      "type": "function",
+      "name": "config_file",
+      "filePath": "etl-service/tests/conftest.py",
+      "lineRange": [
+        45,
+        49
+      ],
+      "summary": "测试夹具，将最小化配置写入临时 YAML 文件并返回文件路径。",
+      "tags": [
+        "测试",
+        "fixture",
+        "临时文件"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/conftest.py:loaded_config_manager",
+      "type": "function",
+      "name": "loaded_config_manager",
+      "filePath": "etl-service/tests/conftest.py",
+      "lineRange": [
+        52,
+        57
+      ],
+      "summary": "测试夹具，创建并加载 ConfigManager 实例，返回已就绪的配置管理器。",
+      "tags": [
+        "测试",
+        "fixture",
+        "配置管理器"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/conftest.py:task_config",
+      "type": "function",
+      "name": "task_config",
+      "filePath": "etl-service/tests/conftest.py",
+      "lineRange": [
+        60,
+        62
+      ],
+      "summary": "测试夹具，返回已加载配置中的第一个任务配置对象。",
+      "tags": [
+        "测试",
+        "fixture",
+        "任务配置"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "type": "file",
+      "name": "test_config_manager.py",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "summary": "ConfigManager 单元测试，覆盖配置加载、不可变性验证、热加载失败保留旧配置、热加载成功通知监听器、环境变量替换等功能。",
+      "tags": [
+        "测试",
+        "单元测试",
+        "配置管理器"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_load_success",
+      "type": "function",
+      "name": "test_load_success",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        41,
+        45
+      ],
+      "summary": "验证 ConfigManager 成功加载配置后可正确读取 instance_id 和任务数量。",
+      "tags": [
+        "测试",
+        "加载验证"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_config_is_frozen",
+      "type": "function",
+      "name": "test_config_is_frozen",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        48,
+        52
+      ],
+      "summary": "验证配置对象为 frozen dataclass，尝试修改属性时抛出 FrozenInstanceError。",
+      "tags": [
+        "测试",
+        "不可变性"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_tasks_is_tuple",
+      "type": "function",
+      "name": "test_tasks_is_tuple",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        55,
+        58
+      ],
+      "summary": "验证任务列表为 tuple 类型而非 list，确保不可变性。",
+      "tags": [
+        "测试",
+        "不可变性"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_hot_reload_invalid_keeps_old",
+      "type": "function",
+      "name": "test_hot_reload_invalid_keeps_old",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        61,
+        73
+      ],
+      "summary": "验证热加载遇到非法配置时保留旧配置，不抛异常且配置对象引用不变。",
+      "tags": [
+        "测试",
+        "热加载",
+        "容错"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_hot_reload_success_notifies_listener",
+      "type": "function",
+      "name": "test_hot_reload_success_notifies_listener",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        76,
+        92
+      ],
+      "summary": "验证热加载成功后监听器收到新旧配置对象回调，且新配置已生效。",
+      "tags": [
+        "测试",
+        "热加载",
+        "监听器"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_get_task",
+      "type": "function",
+      "name": "test_get_task",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        95,
+        101
+      ],
+      "summary": "验证按 task_id 查找任务配置的功能，包括存在和不存在两种情况。",
+      "tags": [
+        "测试",
+        "查询"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_env_var_substitution",
+      "type": "function",
+      "name": "test_env_var_substitution",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        104,
+        117
+      ],
+      "summary": "验证配置文件中 ${VAR} 环境变量替换功能，密码变量被正确解析到 DSN 中。",
+      "tags": [
+        "测试",
+        "环境变量"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_load_fails_on_invalid_config",
+      "type": "function",
+      "name": "test_load_fails_on_invalid_config",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "lineRange": [
+        120,
+        125
+      ],
+      "summary": "验证加载非法 YAML 配置时抛出 ConfigValidationError 异常。",
+      "tags": [
+        "测试",
+        "异常处理"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "type": "file",
+      "name": "test_config_validator.py",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "summary": "配置校验器单元测试，覆盖合法配置通过、缺少主库、HA 需从库、重复 task_id、非法 on_row_error 和非法工作线程数等校验场景。",
+      "tags": [
+        "测试",
+        "单元测试",
+        "配置校验"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_valid_config_passes",
+      "type": "function",
+      "name": "test_valid_config_passes",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "lineRange": [
+        34,
+        36
+      ],
+      "summary": "验证完整合法配置通过校验，返回空错误列表。",
+      "tags": [
+        "测试",
+        "正向校验"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_missing_master_db",
+      "type": "function",
+      "name": "test_missing_master_db",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "lineRange": [
+        39,
+        42
+      ],
+      "summary": "验证缺少主库配置时校验返回包含 'master' 的错误信息。",
+      "tags": [
+        "测试",
+        "数据库校验"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_ha_requires_slaves",
+      "type": "function",
+      "name": "test_ha_requires_slaves",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "lineRange": [
+        45,
+        51
+      ],
+      "summary": "验证 HA 模式启用但未配置从库时，校验返回包含 'slave' 的错误信息。",
+      "tags": [
+        "测试",
+        "HA校验"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_duplicate_task_ids",
+      "type": "function",
+      "name": "test_duplicate_task_ids",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "lineRange": [
+        54,
+        58
+      ],
+      "summary": "验证重复 task_id 时校验返回包含 'duplicate' 或 '重复' 的错误信息。",
+      "tags": [
+        "测试",
+        "重复ID校验"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_invalid_on_row_error",
+      "type": "function",
+      "name": "test_invalid_on_row_error",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "lineRange": [
+        61,
+        66
+      ],
+      "summary": "验证 on_row_error 配置为非法值时校验返回错误。",
+      "tags": [
+        "测试",
+        "枚举值校验"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_invalid_worker_threads",
+      "type": "function",
+      "name": "test_invalid_worker_threads",
+      "filePath": "etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "lineRange": [
+        69,
+        72
+      ],
+      "summary": "验证工作线程数为 0（超出合法范围）时校验返回错误。",
+      "tags": [
+        "测试",
+        "数值范围校验"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/core/file_processor.py",
+      "type": "file",
+      "name": "文件处理器",
+      "filePath": "etl-service/src/core/file_processor.py",
+      "summary": "将 bootstrap 闭包提取为独立 FileProcessor 类，协调状态追踪、流水线执行、质量报告和文件归档",
+      "tags": [
+        "核心",
+        "文件处理",
+        "状态机"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/core/file_processor.py:FileProcessor",
+      "type": "class",
+      "name": "FileProcessor",
+      "filePath": "etl-service/src/core/file_processor.py",
+      "summary": "文件处理核心类，编排 claim→processing→pipeline→success/failed/skipped/retry 全生命周期",
+      "tags": [
+        "核心",
+        "编排器"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/core/file_processor.py:__call__",
+      "type": "function",
+      "name": "FileProcessor.__call__",
+      "filePath": "etl-service/src/core/file_processor.py",
+      "summary": "执行文件处理主流程：claim→processing→pipeline→根据结果标记成功/失败/跳过/重试",
+      "tags": [
+        "入口",
+        "编排"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/utils/logging_config.py",
+      "type": "file",
+      "name": "结构化日志配置",
+      "filePath": "etl-service/src/utils/logging_config.py",
+      "summary": "配置 JSON 结构化日志，自动注入 trace_id 和 task_id，支持日志轮转 (10MB×5)",
+      "tags": [
+        "工具",
+        "日志",
+        "可观测性"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/utils/logging_config.py:JsonFormatter",
+      "type": "class",
+      "name": "JsonFormatter",
+      "filePath": "etl-service/src/utils/logging_config.py",
+      "summary": "将日志格式化为 JSON，自动注入 trace_id 和 task_id",
+      "tags": [
+        "日志",
+        "格式化"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/utils/logging_config.py:setup_logging",
+      "type": "function",
+      "name": "setup_logging",
+      "filePath": "etl-service/src/utils/logging_config.py",
+      "summary": "初始化日志系统：控制台彩色文本 + 文件 JSON 格式轮转",
+      "tags": [
+        "初始化",
+        "日志"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/utils/trace.py",
+      "type": "file",
+      "name": "trace_id 上下文管理",
+      "filePath": "etl-service/src/utils/trace.py",
+      "summary": "基于 ContextVar 的跨线程/协程 trace 传递，避免 threading.local 串扰",
+      "tags": [
+        "工具",
+        "追踪",
+        "ContextVar"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/utils/trace.py:new_trace",
+      "type": "function",
+      "name": "new_trace",
+      "filePath": "etl-service/src/utils/trace.py",
+      "summary": "创建新的 trace，生成唯一 trace_id 并绑定 task_id",
+      "tags": [
+        "追踪",
+        "入口"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/utils/trace.py:get_trace_id",
+      "type": "function",
+      "name": "get_trace_id",
+      "filePath": "etl-service/src/utils/trace.py",
+      "summary": "获取当前 trace_id",
+      "tags": [
+        "追踪",
+        "查询"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/utils/trace.py:get_task_id",
+      "type": "function",
+      "name": "get_task_id",
+      "filePath": "etl-service/src/utils/trace.py",
+      "summary": "获取当前 task_id",
+      "tags": [
+        "追踪",
+        "查询"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/core/task_manager.py",
+      "type": "file",
+      "name": "task_manager.py",
+      "filePath": "etl-service/src/core/task_manager.py",
+      "summary": "多任务生命周期管理模块，负责启动/停止/暂停/恢复/手动触发任务，协调 watchdog 实时监听与轮询兜底扫描，处理死信文件移动，并在每月 1 日触发月表生命周期管理。",
+      "tags": [
+        "任务管理",
+        "生命周期",
+        "watchdog",
+        "轮询",
+        "core"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:etl-service/src/core/task_manager.py:TaskManager",
+      "type": "class",
+      "name": "TaskManager",
+      "filePath": "etl-service/src/core/task_manager.py",
+      "lineRange": [
+        20,
+        148
+      ],
+      "summary": "多任务生命周期管理器，按任务维度启动 watchdog 实时监听与轮询兜底扫描双通道，协调 WorkerPool 提交文件处理、管理暂停/恢复状态，支持死信文件移动和月表生命周期定时触发。",
+      "tags": [
+        "任务管理",
+        "生命周期",
+        "watchdog",
+        "轮询",
+        "死信"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:etl-service/src/infrastructure/worker_pool.py",
+      "type": "file",
+      "name": "worker_pool.py",
+      "filePath": "etl-service/src/infrastructure/worker_pool.py",
+      "summary": "Worker 线程池与 per-task 熔断器模块，基于优先级队列调度任务，实现三态熔断器（CLOSED→OPEN→HALF_OPEN）保护失败任务，Supervisor 线程自动重启死亡 Worker。",
+      "tags": [
+        "线程池",
+        "熔断器",
+        "优先级队列",
+        "supervisor",
+        "infrastructure"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/worker_pool.py:CircuitState",
+      "type": "class",
+      "name": "CircuitState",
+      "filePath": "etl-service/src/infrastructure/worker_pool.py",
+      "lineRange": [
+        23,
+        26
+      ],
+      "summary": "熔断器状态枚举，定义 CLOSED（正常）、OPEN（熔断）、HALF_OPEN（半开试探）三态。",
+      "tags": [
+        "熔断器",
+        "枚举",
+        "状态机"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/worker_pool.py:SubmitResult",
+      "type": "class",
+      "name": "SubmitResult",
+      "filePath": "etl-service/src/infrastructure/worker_pool.py",
+      "lineRange": [
+        29,
+        34
+      ],
+      "summary": "任务提交结果枚举，区分 QUEUED（入队成功）、REJECTED_CIRCUIT_OPEN（熔断拒绝）、REJECTED_HA_STANDBY（备机拒绝）、REJECTED_TASK_PAUSED（暂停拒绝）、QUEUE_FULL（队列满）。",
+      "tags": [
+        "枚举",
+        "提交结果",
+        "拒绝策略"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/worker_pool.py:CircuitBreaker",
+      "type": "class",
+      "name": "CircuitBreaker",
+      "filePath": "etl-service/src/infrastructure/worker_pool.py",
+      "lineRange": [
+        37,
+        89
+      ],
+      "summary": "per-task 熔断器，基于失败计数和超时恢复实现三态切换：CLOSED 正常放行 → OPEN 超过阈值熔断 → HALF_OPEN 探测恢复，HALF_OPEN 只允许一个试探请求，超时兜底重置卡死标志防 Worker 崩溃死锁。",
+      "tags": [
+        "熔断器",
+        "容错",
+        "状态机",
+        "线程安全"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/infrastructure/worker_pool.py:WorkerPool",
+      "type": "class",
+      "name": "WorkerPool",
+      "filePath": "etl-service/src/infrastructure/worker_pool.py",
+      "lineRange": [
+        91,
+        193
+      ],
+      "summary": "优先级队列线程池，Worker 消费队列执行处理函数，每个任务独立熔断器保护，Supervisor 线程每 10 秒检测并重启死亡 Worker，支持 HA 备机拒绝、任务暂停拒绝和队列满拒绝。",
+      "tags": [
+        "线程池",
+        "优先级队列",
+        "熔断器",
+        "supervisor",
+        "infrastructure"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:etl-service/src/utils/file_hash.py",
+      "type": "file",
+      "name": "file_hash.py",
+      "filePath": "etl-service/src/utils/file_hash.py",
+      "summary": "文件快速哈希工具模块，取文件首尾各 4KB 加文件大小做 MD5 摘要，适用于大文件增量检测场景，避免全量读取。",
+      "tags": [
+        "哈希",
+        "MD5",
+        "增量检测",
+        "工具函数",
+        "utils"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/utils/file_hash.py:quick_hash",
+      "type": "function",
+      "name": "quick_hash",
+      "filePath": "etl-service/src/utils/file_hash.py",
+      "lineRange": [
+        11,
+        28
+      ],
+      "summary": "文件快速哈希函数，读取文件首 4KB 和尾 4KB（大文件时跳转）加文件大小生成 MD5 摘要，返回 32 字符 hex 字符串。",
+      "tags": [
+        "哈希",
+        "MD5",
+        "增量检测",
+        "工具函数"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/watcher/event_handler.py",
+      "type": "file",
+      "name": "event_handler.py",
+      "filePath": "etl-service/src/watcher/event_handler.py",
+      "summary": "watchdog 防抖事件处理模块，对文件创建/修改事件进行 3 秒防抖和连续稳定性检查（mtime/size 连续不变才视为稳定），稳定后计算哈希并回调触发处理。",
+      "tags": [
+        "watchdog",
+        "事件处理",
+        "防抖",
+        "稳定性检查",
+        "watcher"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/watcher/event_handler.py:EventHandler",
+      "type": "class",
+      "name": "EventHandler",
+      "filePath": "etl-service/src/watcher/event_handler.py",
+      "lineRange": [
+        18,
+        95
+      ],
+      "summary": "watchdog 事件处理器，对文件创建/修改事件进行防抖调度，通过连续 stability_check_count 次 mtime/size 不变确认文件写入完成后，计算快速哈希并回调通知文件就绪。",
+      "tags": [
+        "watchdog",
+        "事件处理",
+        "防抖",
+        "稳定性检查"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/watcher/polling_scanner.py",
+      "type": "file",
+      "name": "polling_scanner.py",
+      "filePath": "etl-service/src/watcher/polling_scanner.py",
+      "summary": "增量轮询兜底扫描模块，独立线程周期扫描文件目录，仅处理 mtime 大于上次扫描时间的文件，先查数据库状态跳过已成功文件再计算哈希，作为 watchdog 实时监听的补充通道。",
+      "tags": [
+        "轮询",
+        "增量扫描",
+        "文件监控",
+        "兜底",
+        "watcher"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/watcher/polling_scanner.py:PollingScanner",
+      "type": "class",
+      "name": "PollingScanner",
+      "filePath": "etl-service/src/watcher/polling_scanner.py",
+      "lineRange": [
+        18,
+        99
+      ],
+      "summary": "增量轮询扫描器，独立守护线程按配置间隔扫描目录，基于 mtime 增量检测新增/修改文件，先查数据库跳过已成功文件以减少哈希计算开销，发现新文件后提交至 WorkerPool 处理。",
+      "tags": [
+        "轮询",
+        "增量扫描",
+        "线程",
+        "watcher"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/etl/monthly_lifecycle.py",
+      "type": "file",
+      "name": "月表生命周期管理",
+      "filePath": "etl-service/src/etl/monthly_lifecycle.py",
+      "summary": "管理月表归档和删除：超期表标记 ARCHIVED，已归档表才允许 DROP",
+      "tags": [
+        "ETL",
+        "月表",
+        "生命周期"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/etl/monthly_lifecycle.py:MonthlyTableLifecycle",
+      "type": "class",
+      "name": "MonthlyTableLifecycle",
+      "filePath": "etl-service/src/etl/monthly_lifecycle.py",
+      "summary": "月表生命周期管理类，执行归档和删除操作",
+      "tags": [
+        "ETL",
+        "月表"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/etl/monthly_lifecycle.py:run",
+      "type": "function",
+      "name": "MonthlyTableLifecycle.run",
+      "filePath": "etl-service/src/etl/monthly_lifecycle.py",
+      "summary": "执行月表归档：超期表标记 ARCHIVED，不删数据",
+      "tags": [
+        "归档",
+        "月表"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/etl/monthly_lifecycle.py:drop_archived",
+      "type": "function",
+      "name": "MonthlyTableLifecycle.drop_archived",
+      "filePath": "etl-service/src/etl/monthly_lifecycle.py",
+      "summary": "DROP 已 ARCHIVED 的表，逐表独立提交确保一致性",
+      "tags": [
+        "删除",
+        "月表"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/etl/table_router.py",
+      "type": "file",
+      "name": "月表路由",
+      "filePath": "etl-service/src/etl/table_router.py",
+      "summary": "按 partition_field 字段值路由到对应月表，自动建表并注册到 monthly_table_registry",
+      "tags": [
+        "ETL",
+        "路由",
+        "月表"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/etl/table_router.py:TableRouter",
+      "type": "class",
+      "name": "TableRouter",
+      "filePath": "etl-service/src/etl/table_router.py",
+      "summary": "月表路由核心类，按分区字段值路由到对应月表，自动建表+注册",
+      "tags": [
+        "ETL",
+        "路由"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/etl/table_router.py:group_by_table",
+      "type": "function",
+      "name": "TableRouter.group_by_table",
+      "filePath": "etl-service/src/etl/table_router.py",
+      "summary": "将行数据按月份分组到对应表名",
+      "tags": [
+        "路由",
+        "分组"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/etl/table_router.py:ensure_table_exists",
+      "type": "function",
+      "name": "TableRouter.ensure_table_exists",
+      "filePath": "etl-service/src/etl/table_router.py",
+      "summary": "确保月表存在，不存在则按模板创建并注册，带双重检查锁防并发建表",
+      "tags": [
+        "建表",
+        "路由"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:etl-service/src/etl/table_router.py:_resolve_table",
+      "type": "function",
+      "name": "TableRouter._resolve_table",
+      "filePath": "etl-service/src/etl/table_router.py",
+      "summary": "解析行数据中的分区字段，返回目标表名，解析失败降级到当月",
+      "tags": [
+        "路由",
+        "降级"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/etl/table_router.py:_validate_table_name",
+      "type": "function",
+      "name": "TableRouter._validate_table_name",
+      "filePath": "etl-service/src/etl/table_router.py",
+      "summary": "白名单校验表名，防止 SQL 注入",
+      "tags": [
+        "安全",
+        "校验"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/Makefile",
+      "type": "config",
+      "name": "Makefile",
+      "filePath": "etl-service/Makefile",
+      "summary": "项目构建和服务管理命令集合（install/test/lint/run/service等）",
+      "tags": [
+        "构建",
+        "配置"
+      ],
+      "language": "Makefile",
+      "complexity": "simple"
+    },
+    {
+      "id": "document:etl-service/README.md",
+      "type": "document",
+      "name": "项目文档",
+      "filePath": "etl-service/README.md",
+      "summary": "TDCS 项目主文档：功能特性、架构图、快速开始、配置说明、自定义清洗代码指南",
+      "tags": [
+        "文档",
+        "入门"
+      ],
+      "language": "Markdown",
+      "complexity": "simple"
+    },
+    {
+      "id": "document:etl-service/USAGE.md",
+      "type": "document",
+      "name": "使用指南",
+      "filePath": "etl-service/USAGE.md",
+      "summary": "详细使用指南：Web API 端点、配置热加载、监控集成",
+      "tags": [
+        "文档",
+        "使用"
+      ],
+      "language": "Markdown",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/docker-compose.yml",
+      "type": "config",
+      "name": "Docker Compose",
+      "filePath": "etl-service/docker-compose.yml",
+      "summary": "开发环境编排：MySQL 8.0 + Redis 7 服务定义",
+      "tags": [
+        "基础设施",
+        "Docker"
+      ],
+      "language": "YAML",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/pyproject.toml",
+      "type": "config",
+      "name": "项目配置",
+      "filePath": "etl-service/pyproject.toml",
+      "summary": "Python 项目元数据和工具链配置（setuptools/pytest/coverage/mypy）",
+      "tags": [
+        "配置",
+        "Python"
+      ],
+      "language": "TOML",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/requirements.txt",
+      "type": "config",
+      "name": "生产依赖",
+      "filePath": "etl-service/requirements.txt",
+      "summary": "生产环境依赖清单（Flask/SQLAlchemy/watchdog/prometheus-client等16个）",
+      "tags": [
+        "依赖",
+        "配置"
+      ],
+      "language": "Text",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/requirements-dev.txt",
+      "type": "config",
+      "name": "开发依赖",
+      "filePath": "etl-service/requirements-dev.txt",
+      "summary": "开发环境依赖清单（pytest/pytest-cov/mypy/pylint/flask-testing等6个）",
+      "tags": [
+        "依赖",
+        "开发"
+      ],
+      "language": "Text",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/.gitignore",
+      "type": "config",
+      "name": "Git 忽略规则",
+      "filePath": "etl-service/.gitignore",
+      "summary": "Git 忽略规则：__pycache__/dist/logs/config.yaml等",
+      "tags": [
+        "Git",
+        "配置"
+      ],
+      "language": "Text",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/config/config.yaml",
+      "type": "config",
+      "name": "运行配置",
+      "filePath": "etl-service/config/config.yaml",
+      "summary": "ETL 服务运行时配置",
+      "tags": [
+        "配置",
+        "运行时"
+      ],
+      "language": "YAML",
+      "complexity": "simple"
+    },
+    {
+      "id": "config:etl-service/config/config.yaml.example",
+      "type": "config",
+      "name": "配置模板",
+      "filePath": "etl-service/config/config.yaml.example",
+      "summary": "配置文件模板，含全部配置项和注释",
+      "tags": [
+        "配置",
+        "模板"
+      ],
+      "language": "YAML",
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/etl/_sandbox_runner.py",
+      "type": "file",
+      "name": "沙箱子进程入口",
+      "filePath": "etl-service/src/etl/_sandbox_runner.py",
+      "summary": "沙箱子进程入口脚本：从stdin读JSON→调用清洗函数→stdout输出",
+      "tags": [
+        "ETL",
+        "沙箱"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "function:etl-service/src/etl/_sandbox_runner.py:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "etl-service/src/etl/_sandbox_runner.py",
+      "summary": "沙箱入口主函数：解析命令行参数、导入模块、调用清洗函数",
+      "tags": [
+        "沙箱",
+        "入口"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "file:etl-service/src/monitoring/alerting.py",
+      "type": "file",
+      "name": "告警通知",
+      "filePath": "etl-service/src/monitoring/alerting.py",
+      "summary": "钉钉/Webhook多通道告警，质量评分和失败文件数阈值触发",
+      "tags": [
+        "监控",
+        "告警"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:etl-service/src/monitoring/alerting.py:Alerter",
+      "type": "class",
+      "name": "Alerter",
+      "filePath": "etl-service/src/monitoring/alerting.py",
+      "summary": "告警器：支持钉钉和Webhook通道，按规则阈值自动触发",
+      "tags": [
+        "告警"
+      ],
+      "language": "Python",
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/src/monitoring/metrics.py",
+      "type": "file",
+      "name": "Prometheus指标",
+      "filePath": "etl-service/src/monitoring/metrics.py",
+      "summary": "12个核心Prometheus指标（Counter/Gauge/Histogram）",
+      "tags": [
+        "监控",
+        "指标"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "schema:etl-service/scripts/init_db.sql",
+      "type": "schema",
+      "name": "数据库初始化脚本",
+      "filePath": "etl-service/scripts/init_db.sql",
+      "summary": "MySQL初始化DDL：9张核心表",
+      "tags": [
+        "数据库",
+        "SQL"
+      ],
+      "language": "SQL",
+      "complexity": "moderate"
+    },
+    {
+      "id": "schema:etl-service/sql_templates/cfd_data.sql",
+      "type": "schema",
+      "name": "CFD建表模板",
+      "filePath": "etl-service/sql_templates/cfd_data.sql",
+      "summary": "CFD数据月表建表SQL模板，含TABLE_NAME占位符",
+      "tags": [
+        "数据库",
+        "模板"
+      ],
+      "language": "SQL",
+      "complexity": "simple"
+    },
+    {
+      "id": "document:etl-service/src/web/static/index.html",
+      "type": "document",
+      "name": "Web管理界面",
+      "filePath": "etl-service/src/web/static/index.html",
+      "summary": "单页Web管理界面",
+      "tags": [
+        "Web",
+        "前端"
+      ],
+      "language": "HTML",
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:etl-service/gen_ui.py",
+      "type": "file",
+      "name": "UI生成脚本",
+      "filePath": "etl-service/gen_ui.py",
+      "summary": "Web管理界面生成脚本",
+      "tags": [
+        "工具",
+        "Web"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    },
+    {
+      "id": "file:script:etl-service/scripts/verify_skill_a.py",
+      "type": "file",
+      "name": "技能验证脚本",
+      "filePath": "etl-service/scripts/verify_skill_a.py",
+      "summary": "技能A验证脚本",
+      "tags": [
+        "脚本",
+        "验证"
+      ],
+      "language": "Python",
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:etl-service/src/etl/encryption.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/etl/loader.py",
+      "target": "file:etl-service/src/infrastructure/database.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/etl/loader.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/ha_elector.py",
+      "target": "file:etl-service/src/infrastructure/database.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/ha_elector.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/state_tracker.py",
+      "target": "file:etl-service/src/infrastructure/database.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/utils/logging_config.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/core/config.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/core/file_processor.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/infrastructure/database.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/infrastructure/state_tracker.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/infrastructure/worker_pool.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/infrastructure/ha_elector.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/infrastructure/file_archiver.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/infrastructure/cache.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/etl/table_router.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/etl/loader.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/etl/encryption.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/etl/extractor.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/monitoring/quality_reporter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/core/pipeline.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/core/task_manager.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "file:etl-service/src/web/app.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/monitoring/quality_reporter.py",
+      "target": "file:etl-service/src/infrastructure/database.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/monitoring/quality_reporter.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_sculptor/test_loader.py",
+      "target": "file:etl-service/src/etl/loader.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_sculptor/test_quality_reporter.py",
+      "target": "file:etl-service/src/monitoring/quality_reporter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/etl/encryption.py",
+      "target": "class:etl-service/src/etl/encryption.py:Encryption",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/etl/loader.py",
+      "target": "class:etl-service/src/etl/loader.py:Loader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/cache.py",
+      "target": "class:etl-service/src/infrastructure/cache.py:CacheManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/file_archiver.py",
+      "target": "class:etl-service/src/infrastructure/file_archiver.py:FileArchiver",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/ha_elector.py",
+      "target": "class:etl-service/src/infrastructure/ha_elector.py:HAElector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/state_tracker.py",
+      "target": "class:etl-service/src/infrastructure/state_tracker.py:StateTracker",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "function:etl-service/src/main.py:bootstrap",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/monitoring/quality_reporter.py",
+      "target": "class:etl-service/src/monitoring/quality_reporter.py:QualityReporter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_sculptor/test_loader.py",
+      "target": "function:etl-service/tests/unit/test_sculptor/test_loader.py:make_db",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/etl/encryption.py",
+      "target": "class:etl-service/src/etl/encryption.py:Encryption",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/etl/loader.py",
+      "target": "class:etl-service/src/etl/loader.py:Loader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/cache.py",
+      "target": "class:etl-service/src/infrastructure/cache.py:CacheManager",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/file_archiver.py",
+      "target": "class:etl-service/src/infrastructure/file_archiver.py:FileArchiver",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/ha_elector.py",
+      "target": "class:etl-service/src/infrastructure/ha_elector.py:HAElector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/state_tracker.py",
+      "target": "class:etl-service/src/infrastructure/state_tracker.py:StateTracker",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/main.py",
+      "target": "function:etl-service/src/main.py:bootstrap",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/monitoring/quality_reporter.py",
+      "target": "class:etl-service/src/monitoring/quality_reporter.py:QualityReporter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/cache.py",
+      "target": "file:etl-service/tests/unit/test_sculptor/test_cache.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/src/etl/loader.py",
+      "target": "file:etl-service/tests/unit/test_sculptor/test_loader.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/src/monitoring/quality_reporter.py",
+      "target": "file:etl-service/tests/unit/test_sculptor/test_quality_reporter.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/main.py:bootstrap",
+      "target": "class:etl-service/src/etl/encryption.py:Encryption",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/main.py:bootstrap",
+      "target": "class:etl-service/src/etl/loader.py:Loader",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/main.py:bootstrap",
+      "target": "class:etl-service/src/infrastructure/cache.py:CacheManager",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/main.py:bootstrap",
+      "target": "class:etl-service/src/infrastructure/file_archiver.py:FileArchiver",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/main.py:bootstrap",
+      "target": "class:etl-service/src/infrastructure/ha_elector.py:HAElector",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/main.py:bootstrap",
+      "target": "class:etl-service/src/infrastructure/state_tracker.py:StateTracker",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/main.py:bootstrap",
+      "target": "class:etl-service/src/monitoring/quality_reporter.py:QualityReporter",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:ETLError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:RetryableError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:FatalError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:SkipFileError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:SandboxError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:ETLError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:RetryableError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:FatalError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:SkipFileError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "class:etl-service/src/core/exceptions.py:SandboxError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/core/exceptions.py:RetryableError",
+      "target": "class:etl-service/src/core/exceptions.py:ETLError",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "class:etl-service/src/core/exceptions.py:FatalError",
+      "target": "class:etl-service/src/core/exceptions.py:ETLError",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "class:etl-service/src/core/exceptions.py:SkipFileError",
+      "target": "class:etl-service/src/core/exceptions.py:ETLError",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "class:etl-service/src/core/exceptions.py:SandboxError",
+      "target": "class:etl-service/src/core/exceptions.py:FatalError",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/etl/extractor.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/etl/table_router.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/etl/loader.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/etl/encryption.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/monitoring/quality_reporter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "class:etl-service/src/core/pipeline.py:PipelineStatus",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "class:etl-service/src/core/pipeline.py:PipelineResult",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "class:etl-service/src/core/pipeline.py:ETLPipeline",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/pipeline.py:ETLPipeline",
+      "target": "function:etl-service/src/core/pipeline.py:execute",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "class:etl-service/src/core/pipeline.py:ETLPipeline",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "class:etl-service/src/core/pipeline.py:PipelineStatus",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "class:etl-service/src/core/pipeline.py:PipelineResult",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/pipeline.py:execute",
+      "target": "class:etl-service/src/core/exceptions.py:RetryableError",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/pipeline.py:execute",
+      "target": "class:etl-service/src/core/exceptions.py:FatalError",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/pipeline.py:execute",
+      "target": "class:etl-service/src/core/exceptions.py:SkipFileError",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/etl/extractor.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/etl/extractor.py",
+      "target": "class:etl-service/src/etl/extractor.py:StreamingExtractor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/etl/extractor.py",
+      "target": "class:etl-service/src/etl/extractor.py:StreamingExtractor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/etl/extractor.py:StreamingExtractor",
+      "target": "function:etl-service/src/etl/extractor.py:stream",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "function:etl-service/src/etl/extractor.py:stream",
+      "target": "class:etl-service/src/core/exceptions.py:SkipFileError",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/etl/transform_sandbox.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/etl/transform_sandbox.py",
+      "target": "class:etl-service/src/etl/transform_sandbox.py:TransformSandbox",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/etl/transform_sandbox.py",
+      "target": "class:etl-service/src/etl/transform_sandbox.py:TransformSandbox",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/etl/transform_sandbox.py:TransformSandbox",
+      "target": "function:etl-service/src/etl/transform_sandbox.py:transform_batch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/etl/transform_sandbox.py:TransformSandbox",
+      "target": "function:etl-service/src/etl/transform_sandbox.py:validate_syntax",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "function:etl-service/src/etl/transform_sandbox.py:transform_batch",
+      "target": "class:etl-service/src/core/exceptions.py:RetryableError",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/etl/transform_sandbox.py:transform_batch",
+      "target": "class:etl-service/src/core/exceptions.py:SandboxError",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/database.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/database.py",
+      "target": "class:etl-service/src/infrastructure/database.py:DatabaseManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/database.py",
+      "target": "class:etl-service/src/infrastructure/database.py:DatabaseManager",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "class:etl-service/src/etl/transform_sandbox.py:TransformSandbox",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "function:etl-service/src/web/api/cleaners.py:test_cleaner",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "function:etl-service/src/web/api/cleaners.py:validate_cleaner",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "function:etl-service/src/web/api/cleaners.py:test_cleaner",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "function:etl-service/src/web/api/cleaners.py:validate_cleaner",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/web/api/cleaners.py:test_cleaner",
+      "target": "function:etl-service/src/etl/transform_sandbox.py:transform_batch",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/web/api/cleaners.py:validate_cleaner",
+      "target": "function:etl-service/src/etl/transform_sandbox.py:validate_syntax",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_exceptions.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/exceptions.py",
+      "target": "file:etl-service/tests/unit/test_foundation/test_exceptions.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_pipeline/test_extractor.py",
+      "target": "file:etl-service/src/etl/extractor.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/etl/extractor.py",
+      "target": "file:etl-service/tests/unit/test_pipeline/test_extractor.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_pipeline/test_pipeline.py",
+      "target": "file:etl-service/src/core/pipeline.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/tests/unit/test_pipeline/test_pipeline.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_pipeline/test_sandbox.py",
+      "target": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/etl/transform_sandbox.py",
+      "target": "file:etl-service/tests/unit/test_pipeline/test_sandbox.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/etl/extractor.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/core/pipeline.py",
+      "target": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/api/config_api.py",
+      "target": "function:etl-service/src/web/api/config_api.py:get_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/config_api.py",
+      "target": "function:etl-service/src/web/api/config_api.py:reload_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/config_api.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:etl-service/src/web/api/config_api.py:reload_config",
+      "target": "function:etl-service/src/web/api/config_api.py:get_config",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/src/web/api/files.py",
+      "target": "function:etl-service/src/web/api/files.py:list_files",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/files.py",
+      "target": "function:etl-service/src/web/api/files.py:retry_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/files.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/files.py",
+      "target": "file:etl-service/src/infrastructure/state_tracker.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/quality.py",
+      "target": "function:etl-service/src/web/api/quality.py:get_quality",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/quality.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/quality.py",
+      "target": "file:etl-service/src/monitoring/quality_reporter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/system.py",
+      "target": "function:etl-service/src/web/api/system.py:health",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/system.py",
+      "target": "function:etl-service/src/web/api/system.py:metrics",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/system.py",
+      "target": "function:etl-service/src/web/api/system.py:login",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/system.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/system.py",
+      "target": "file:etl-service/src/infrastructure/ha_elector.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/system.py",
+      "target": "file:etl-service/src/infrastructure/worker_pool.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:etl-service/src/web/api/system.py:login",
+      "target": "function:etl-service/src/web/auth.py:generate_token",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "function:etl-service/src/web/api/tasks.py:list_tasks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "function:etl-service/src/web/api/tasks.py:_get_tm_or_404",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "function:etl-service/src/web/api/tasks.py:pause_task",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "function:etl-service/src/web/api/tasks.py:resume_task",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "function:etl-service/src/web/api/tasks.py:trigger_task",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "file:etl-service/src/core/task_manager.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/api/tasks.py",
+      "target": "file:etl-service/src/infrastructure/worker_pool.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:etl-service/src/web/api/tasks.py:pause_task",
+      "target": "function:etl-service/src/web/api/tasks.py:_get_tm_or_404",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/web/api/tasks.py:resume_task",
+      "target": "function:etl-service/src/web/api/tasks.py:_get_tm_or_404",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/web/api/tasks.py:trigger_task",
+      "target": "function:etl-service/src/web/api/tasks.py:_get_tm_or_404",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/web/api/users.py",
+      "target": "function:etl-service/src/web/api/users.py:list_users",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/users.py",
+      "target": "function:etl-service/src/web/api/users.py:delete_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/api/users.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "function:etl-service/src/web/app.py:create_app",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "function:etl-service/src/web/app.py:run_server",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/config_api.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/files.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/quality.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/system.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/tasks.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/users.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/config_api.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/files.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/quality.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/system.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/tasks.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/users.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/web/auth.py",
+      "target": "function:etl-service/src/web/auth.py:generate_token",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/web/auth.py",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "function:etl-service/src/web/api/config_api.py:get_config",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/config_api.py:reload_config",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/files.py:list_files",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/files.py:retry_file",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/quality.py:get_quality",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/tasks.py:list_tasks",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/tasks.py:pause_task",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/tasks.py:resume_task",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/tasks.py:trigger_task",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/users.py:list_users",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/src/web/api/users.py:delete_user",
+      "target": "function:etl-service/src/web/auth.py:require_auth",
+      "type": "middleware",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "class:etl-service/src/core/config.py:ConfigManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.__init__",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.load",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.reload",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.add_listener",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.get_task",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._read_yaml",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_dsn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_cache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_monitoring",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_task",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config.py:ConfigManager",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._resolve_instance_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/src/core/config_models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/src/core/config_validator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager.load",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager.reload",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager.load",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._read_yaml",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager.load",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager.reload",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._read_yaml",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager.reload",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_dsn",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_cache",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_monitoring",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._build_task",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/src/core/config.py:ConfigManager._build",
+      "target": "function:etl-service/src/core/config.py:ConfigManager._resolve_instance_id",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "class:etl-service/src/core/config_models.py:AppConfig",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "class:etl-service/src/core/config_models.py:TaskConfig",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/src/core/config_models.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/src/core/config_validator.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:TaskConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:HAConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:WebConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:EncryptionConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:CacheLocalConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:CacheRedisConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:CacheConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:AlertingRuleConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:AlertingChannelConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:AlertingConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:PrometheusConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:MonitoringConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "class:etl-service/src/core/config_models.py:AppConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AppConfig",
+      "target": "class:etl-service/src/core/config_models.py:TaskConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AppConfig",
+      "target": "class:etl-service/src/core/config_models.py:HAConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AppConfig",
+      "target": "class:etl-service/src/core/config_models.py:WebConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AppConfig",
+      "target": "class:etl-service/src/core/config_models.py:EncryptionConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AppConfig",
+      "target": "class:etl-service/src/core/config_models.py:CacheConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AppConfig",
+      "target": "class:etl-service/src/core/config_models.py:MonitoringConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:CacheConfig",
+      "target": "class:etl-service/src/core/config_models.py:CacheLocalConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:CacheConfig",
+      "target": "class:etl-service/src/core/config_models.py:CacheRedisConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:MonitoringConfig",
+      "target": "class:etl-service/src/core/config_models.py:PrometheusConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:MonitoringConfig",
+      "target": "class:etl-service/src/core/config_models.py:AlertingConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AlertingConfig",
+      "target": "class:etl-service/src/core/config_models.py:AlertingRuleConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_models.py:AlertingConfig",
+      "target": "class:etl-service/src/core/config_models.py:AlertingChannelConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:ServiceConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:DatabaseNodeSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:CacheConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:ConcurrencyConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:HAConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:WebConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:AlertingConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:TaskConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "function:etl-service/src/core/config_validator.py:_normalize_raw",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "function:etl-service/src/core/config_validator.py:validate_standalone_single_node",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "function:etl-service/src/core/config_validator.py:validate_config",
+      "target": "function:etl-service/src/core/config_validator.py:_normalize_raw",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "target": "class:etl-service/src/core/config_validator.py:ServiceConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "target": "class:etl-service/src/core/config_validator.py:TaskConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "target": "class:etl-service/src/core/config_validator.py:WebConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "target": "class:etl-service/src/core/config_validator.py:HAConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "target": "class:etl-service/src/core/config_validator.py:ConcurrencyConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "target": "class:etl-service/src/core/config_validator.py:CacheConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:AppConfigSchema",
+      "target": "class:etl-service/src/core/config_validator.py:AlertingConfigSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/src/core/config_models.py",
+      "target": "file:etl-service/src/core/config.py",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "file:etl-service/src/core/config.py",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:ServiceConfigSchema",
+      "target": "class:etl-service/src/core/config_models.py:AppConfig",
+      "type": "validates",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:TaskConfigSchema",
+      "target": "class:etl-service/src/core/config_models.py:TaskConfig",
+      "type": "validates",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:HAConfigSchema",
+      "target": "class:etl-service/src/core/config_models.py:HAConfig",
+      "type": "validates",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "class:etl-service/src/core/config_validator.py:WebConfigSchema",
+      "target": "class:etl-service/src/core/config_models.py:WebConfig",
+      "type": "validates",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:etl-service/tests/conftest.py",
+      "target": "function:etl-service/tests/conftest.py:minimal_config_dict",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/conftest.py",
+      "target": "function:etl-service/tests/conftest.py:config_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/conftest.py",
+      "target": "function:etl-service/tests/conftest.py:loaded_config_manager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/conftest.py",
+      "target": "function:etl-service/tests/conftest.py:task_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/conftest.py",
+      "target": "file:etl-service/src/core/config.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:etl-service/tests/conftest.py:loaded_config_manager",
+      "target": "class:etl-service/src/core/config.py:ConfigManager",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/conftest.py:task_config",
+      "target": "function:etl-service/tests/conftest.py:loaded_config_manager",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_load_success",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_config_is_frozen",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_tasks_is_tuple",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_hot_reload_invalid_keeps_old",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_hot_reload_success_notifies_listener",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_get_task",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_env_var_substitution",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_load_fails_on_invalid_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "file:etl-service/src/core/config.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5,
+      "description": "Direction corrected (was test → production)"
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_valid_config_passes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_missing_master_db",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_ha_requires_slaves",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_duplicate_task_ids",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_invalid_on_row_error",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "target": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_invalid_worker_threads",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "target": "file:etl-service/src/core/config_validator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/config_validator.py",
+      "target": "file:etl-service/tests/unit/test_foundation/test_config_validator.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5,
+      "description": "Direction corrected (was test → production)"
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_load_success",
+      "target": "class:etl-service/src/core/config.py:ConfigManager",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_hot_reload_invalid_keeps_old",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.reload",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_hot_reload_success_notifies_listener",
+      "target": "function:etl-service/src/core/config.py:ConfigManager.add_listener",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_valid_config_passes",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_missing_master_db",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_ha_requires_slaves",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_duplicate_task_ids",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_invalid_on_row_error",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_validator.py:test_invalid_worker_threads",
+      "target": "function:etl-service/src/core/config_validator.py:validate_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/config.py",
+      "target": "file:etl-service/src/main.py",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_config_is_frozen",
+      "target": "class:etl-service/src/core/config_models.py:AppConfig",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:etl-service/tests/unit/test_foundation/test_config_manager.py:test_load_fails_on_invalid_config",
+      "target": "class:etl-service/src/core/config.py:ConfigManager",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/core/file_processor.py",
+      "target": "class:etl-service/src/core/file_processor.py:FileProcessor",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/core/file_processor.py:FileProcessor",
+      "target": "function:etl-service/src/core/file_processor.py:__call__",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/utils/logging_config.py",
+      "target": "class:etl-service/src/utils/logging_config.py:JsonFormatter",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/utils/logging_config.py",
+      "target": "function:etl-service/src/utils/logging_config.py:setup_logging",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/utils/logging_config.py",
+      "target": "file:etl-service/src/utils/trace.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/core/file_processor.py",
+      "target": "file:etl-service/src/utils/trace.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/core/file_processor.py",
+      "target": "file:etl-service/src/core/pipeline.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "function:etl-service/src/core/file_processor.py:__call__",
+      "target": "function:etl-service/src/utils/trace.py:new_trace",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "function:etl-service/src/utils/logging_config.py:setup_logging",
+      "target": "class:etl-service/src/utils/logging_config.py:JsonFormatter",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/utils/logging_config.py:JsonFormatter",
+      "target": "function:etl-service/src/utils/trace.py:get_trace_id",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/utils/logging_config.py:JsonFormatter",
+      "target": "function:etl-service/src/utils/trace.py:get_task_id",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/utils/logging_config.py",
+      "target": "function:etl-service/src/utils/logging_config.py:setup_logging",
+      "type": "exports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/utils/trace.py",
+      "target": "function:etl-service/src/utils/trace.py:new_trace",
+      "type": "exports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/utils/trace.py",
+      "target": "function:etl-service/src/utils/trace.py:get_trace_id",
+      "type": "exports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/utils/trace.py",
+      "target": "function:etl-service/src/utils/trace.py:get_task_id",
+      "type": "exports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/core/file_processor.py",
+      "target": "class:etl-service/src/core/file_processor.py:FileProcessor",
+      "type": "exports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/core/task_manager.py",
+      "target": "file:etl-service/src/watcher/event_handler.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/task_manager.py",
+      "target": "file:etl-service/src/watcher/polling_scanner.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/task_manager.py",
+      "target": "file:etl-service/src/infrastructure/worker_pool.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/watcher/event_handler.py",
+      "target": "file:etl-service/src/utils/file_hash.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/watcher/polling_scanner.py",
+      "target": "file:etl-service/src/utils/file_hash.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:etl-service/src/core/task_manager.py",
+      "target": "class:etl-service/src/core/task_manager.py:TaskManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:CircuitState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:SubmitResult",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:CircuitBreaker",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:WorkerPool",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/utils/file_hash.py",
+      "target": "function:etl-service/src/utils/file_hash.py:quick_hash",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/watcher/event_handler.py",
+      "target": "class:etl-service/src/watcher/event_handler.py:EventHandler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/watcher/polling_scanner.py",
+      "target": "class:etl-service/src/watcher/polling_scanner.py:PollingScanner",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:etl-service/src/core/task_manager.py",
+      "target": "class:etl-service/src/core/task_manager.py:TaskManager",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:CircuitState",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:SubmitResult",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:CircuitBreaker",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/infrastructure/worker_pool.py",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:WorkerPool",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/utils/file_hash.py",
+      "target": "function:etl-service/src/utils/file_hash.py:quick_hash",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/watcher/event_handler.py",
+      "target": "class:etl-service/src/watcher/event_handler.py:EventHandler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/watcher/polling_scanner.py",
+      "target": "class:etl-service/src/watcher/polling_scanner.py:PollingScanner",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/core/task_manager.py:TaskManager",
+      "target": "class:etl-service/src/watcher/event_handler.py:EventHandler",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/core/task_manager.py:TaskManager",
+      "target": "class:etl-service/src/watcher/polling_scanner.py:PollingScanner",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/core/task_manager.py:TaskManager",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:WorkerPool",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/core/task_manager.py:TaskManager",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:SubmitResult",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/infrastructure/worker_pool.py:WorkerPool",
+      "target": "class:etl-service/src/infrastructure/worker_pool.py:CircuitBreaker",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/watcher/event_handler.py:EventHandler",
+      "target": "function:etl-service/src/utils/file_hash.py:quick_hash",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:etl-service/src/watcher/polling_scanner.py:PollingScanner",
+      "target": "function:etl-service/src/utils/file_hash.py:quick_hash",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:etl-service/src/etl/monthly_lifecycle.py",
+      "target": "class:etl-service/src/etl/monthly_lifecycle.py:MonthlyTableLifecycle",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/etl/monthly_lifecycle.py:MonthlyTableLifecycle",
+      "target": "function:etl-service/src/etl/monthly_lifecycle.py:run",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/etl/monthly_lifecycle.py:MonthlyTableLifecycle",
+      "target": "function:etl-service/src/etl/monthly_lifecycle.py:drop_archived",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/etl/table_router.py",
+      "target": "class:etl-service/src/etl/table_router.py:TableRouter",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/etl/table_router.py:TableRouter",
+      "target": "function:etl-service/src/etl/table_router.py:group_by_table",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/etl/table_router.py:TableRouter",
+      "target": "function:etl-service/src/etl/table_router.py:ensure_table_exists",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/etl/table_router.py:TableRouter",
+      "target": "function:etl-service/src/etl/table_router.py:_resolve_table",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "class:etl-service/src/etl/table_router.py:TableRouter",
+      "target": "function:etl-service/src/etl/table_router.py:_validate_table_name",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "function:etl-service/src/etl/monthly_lifecycle.py:drop_archived",
+      "target": "function:etl-service/src/etl/table_router.py:_validate_table_name",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/etl/monthly_lifecycle.py",
+      "target": "file:etl-service/src/etl/table_router.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/etl/table_router.py",
+      "target": "function:etl-service/src/etl/table_router.py:group_by_table",
+      "type": "exports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/etl/table_router.py",
+      "target": "class:etl-service/src/etl/table_router.py:TableRouter",
+      "type": "exports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "function:etl-service/src/etl/table_router.py:ensure_table_exists",
+      "target": "function:etl-service/src/etl/table_router.py:_validate_table_name",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "function:etl-service/src/etl/table_router.py:group_by_table",
+      "target": "function:etl-service/src/etl/table_router.py:_resolve_table",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/etl/table_router.py",
+      "target": "file:etl-service/src/infrastructure/database.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "config:etl-service/docker-compose.yml",
+      "target": "config:etl-service/requirements.txt",
+      "type": "related",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "config:etl-service/pyproject.toml",
+      "target": "config:etl-service/requirements.txt",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:etl-service/pyproject.toml",
+      "target": "config:etl-service/requirements-dev.txt",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:etl-service/Makefile",
+      "target": "config:etl-service/pyproject.toml",
+      "type": "depends_on",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:etl-service/Makefile",
+      "target": "config:etl-service/requirements.txt",
+      "type": "depends_on",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "document:etl-service/README.md",
+      "target": "config:etl-service/docker-compose.yml",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:etl-service/README.md",
+      "target": "config:etl-service/requirements.txt",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:etl-service/README.md",
+      "target": "config:etl-service/pyproject.toml",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/etl/_sandbox_runner.py",
+      "target": "function:etl-service/src/etl/_sandbox_runner.py:main",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/monitoring/alerting.py",
+      "target": "class:etl-service/src/monitoring/alerting.py:Alerter",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/monitoring/alerting.py",
+      "target": "file:etl-service/src/monitoring/metrics.py",
+      "type": "related",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "config:etl-service/config/config.yaml.example",
+      "target": "schema:etl-service/scripts/init_db.sql",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:etl-service/config/config.yaml",
+      "target": "config:etl-service/config/config.yaml.example",
+      "type": "related",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/etl/_sandbox_runner.py",
+      "target": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "related",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/gen_ui.py",
+      "target": "document:etl-service/src/web/static/index.html",
+      "type": "writes_to",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "schema:etl-service/sql_templates/cfd_data.sql",
+      "target": "schema:etl-service/scripts/init_db.sql",
+      "type": "related",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:etl-service/src/service.py",
+      "target": "file:etl-service/src/main.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    },
+    {
+      "source": "file:etl-service/src/web/app.py",
+      "target": "file:etl-service/src/web/api/cleaners.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "file:etl-service/src/web/auth.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    },
+    {
+      "source": "file:etl-service/src/web/api/cleaners.py",
+      "target": "file:etl-service/src/etl/transform_sandbox.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_pipeline/test_extractor.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_pipeline/test_pipeline.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_pipeline/test_sandbox.py",
+      "target": "file:etl-service/src/core/exceptions.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    },
+    {
+      "source": "file:etl-service/tests/unit/test_sculptor/test_cache.py",
+      "target": "file:etl-service/src/infrastructure/cache.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7,
+      "recoveredFromImportMap": true
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:entry-point",
+      "name": "入口与启动层",
+      "description": "服务入口和启动逻辑，组装所有组件并启动服务",
+      "nodeIds": [
+        "file:etl-service/src/main.py",
+        "file:etl-service/src/service.py",
+        "file:etl-service/src/web/app.py"
+      ]
+    },
+    {
+      "id": "layer:core",
+      "name": "核心编排层",
+      "description": "ETL 核心逻辑：文件处理、流水线编排、异常体系、配置管理",
+      "nodeIds": [
+        "file:etl-service/src/core/file_processor.py",
+        "file:etl-service/src/core/pipeline.py",
+        "file:etl-service/src/core/exceptions.py",
+        "file:etl-service/src/core/config.py",
+        "file:etl-service/src/core/config_models.py",
+        "file:etl-service/src/core/config_validator.py",
+        "file:etl-service/src/core/task_manager.py"
+      ]
+    },
+    {
+      "id": "layer:etl",
+      "name": "ETL 数据处理层",
+      "description": "Extract→Transform→Encrypt→Route→Load 数据处理管线各组件",
+      "nodeIds": [
+        "file:etl-service/src/etl/extractor.py",
+        "file:etl-service/src/etl/transform_sandbox.py",
+        "file:etl-service/src/etl/_sandbox_runner.py",
+        "file:etl-service/src/etl/encryption.py",
+        "file:etl-service/src/etl/table_router.py",
+        "file:etl-service/src/etl/loader.py",
+        "file:etl-service/src/etl/monthly_lifecycle.py"
+      ]
+    },
+    {
+      "id": "layer:infrastructure",
+      "name": "基础设施层",
+      "description": "数据库连接、状态追踪、HA选举、缓存、文件归档、Worker线程池",
+      "nodeIds": [
+        "file:etl-service/src/infrastructure/database.py",
+        "file:etl-service/src/infrastructure/state_tracker.py",
+        "file:etl-service/src/infrastructure/ha_elector.py",
+        "file:etl-service/src/infrastructure/cache.py",
+        "file:etl-service/src/infrastructure/file_archiver.py",
+        "file:etl-service/src/infrastructure/worker_pool.py"
+      ]
+    },
+    {
+      "id": "layer:watcher",
+      "name": "文件监控层",
+      "description": "文件变化检测：watchdog 事件防抖和增量轮询兜底扫描",
+      "nodeIds": [
+        "file:etl-service/src/watcher/event_handler.py",
+        "file:etl-service/src/watcher/polling_scanner.py"
+      ]
+    },
+    {
+      "id": "layer:web-api",
+      "name": "Web API 层",
+      "description": "Flask Web 管理 API：认证、任务管理、文件查询、系统监控",
+      "nodeIds": [
+        "file:etl-service/src/web/auth.py",
+        "file:etl-service/src/web/api/config_api.py",
+        "file:etl-service/src/web/api/files.py",
+        "file:etl-service/src/web/api/quality.py",
+        "file:etl-service/src/web/api/system.py",
+        "file:etl-service/src/web/api/tasks.py",
+        "file:etl-service/src/web/api/users.py",
+        "file:etl-service/src/web/api/cleaners.py"
+      ]
+    },
+    {
+      "id": "layer:monitoring",
+      "name": "监控与告警层",
+      "description": "数据质量评分、Prometheus 指标、多通道告警通知",
+      "nodeIds": [
+        "file:etl-service/src/monitoring/quality_reporter.py",
+        "file:etl-service/src/monitoring/alerting.py",
+        "file:etl-service/src/monitoring/metrics.py"
+      ]
+    },
+    {
+      "id": "layer:utils",
+      "name": "工具与支撑层",
+      "description": "通用工具函数：日志配置、trace追踪、文件哈希",
+      "nodeIds": [
+        "file:etl-service/src/utils/logging_config.py",
+        "file:etl-service/src/utils/trace.py",
+        "file:etl-service/src/utils/file_hash.py"
+      ]
+    },
+    {
+      "id": "layer:tests",
+      "name": "测试层",
+      "description": "单元测试和集成测试，覆盖各核心模块",
+      "nodeIds": [
+        "file:etl-service/tests/unit/test_sculptor/test_cache.py",
+        "file:etl-service/tests/unit/test_sculptor/test_loader.py",
+        "file:etl-service/tests/unit/test_sculptor/test_quality_reporter.py",
+        "file:etl-service/tests/unit/test_foundation/test_exceptions.py",
+        "file:etl-service/tests/unit/test_pipeline/test_extractor.py",
+        "file:etl-service/tests/unit/test_pipeline/test_pipeline.py",
+        "file:etl-service/tests/unit/test_pipeline/test_sandbox.py",
+        "file:etl-service/tests/conftest.py",
+        "file:etl-service/tests/unit/test_foundation/test_config_manager.py",
+        "file:etl-service/tests/unit/test_foundation/test_config_validator.py"
+      ]
+    },
+    {
+      "id": "layer:config-infra",
+      "name": "配置与基础设施文件层",
+      "description": "项目配置、文档、SQL schema、Docker编排等非代码文件",
+      "nodeIds": [
+        "config:etl-service/Makefile",
+        "document:etl-service/README.md",
+        "document:etl-service/USAGE.md",
+        "config:etl-service/docker-compose.yml",
+        "config:etl-service/pyproject.toml",
+        "config:etl-service/requirements.txt",
+        "config:etl-service/requirements-dev.txt",
+        "config:etl-service/.gitignore",
+        "config:etl-service/config/config.yaml",
+        "config:etl-service/config/config.yaml.example",
+        "schema:etl-service/scripts/init_db.sql",
+        "schema:etl-service/sql_templates/cfd_data.sql",
+        "document:etl-service/src/web/static/index.html",
+        "file:etl-service/gen_ui.py",
+        "file:script:etl-service/scripts/verify_skill_a.py"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "项目概览",
+      "description": "从 README 开始了解 TDCS 项目的目标、架构和功能特性：实验室侧定时数据采集服务，监控目录文件变化，自动完成 Extract→Transform→Load 全流程。",
+      "nodeIds": [
+        "document:etl-service/README.md"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "服务启动与组装",
+      "description": "理解服务如何启动：main.py 作为入口组装全部组件（配置→数据库→HA→Worker池→Web），service.py 封装 Windows 服务。",
+      "nodeIds": [
+        "file:etl-service/src/main.py",
+        "file:etl-service/src/service.py"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "核心配置体系",
+      "description": "了解不可变配置体系：config.py 管理原子替换与热加载，config_models.py 定义 frozen dataclass，config_validator.py 基于 Pydantic 校验。",
+      "nodeIds": [
+        "file:etl-service/src/core/config.py",
+        "file:etl-service/src/core/config_models.py",
+        "file:etl-service/src/core/config_validator.py"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "ETL 数据处理管线",
+      "description": "深入 ETL 核心管线：pipeline.py 编排 Extract→Transform→Load 流程，file_processor.py 协调状态追踪和熔断器，exceptions.py 定义异常分类。",
+      "nodeIds": [
+        "file:etl-service/src/core/pipeline.py",
+        "file:etl-service/src/core/file_processor.py",
+        "file:etl-service/src/core/exceptions.py"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "数据提取与沙箱转换",
+      "description": "探索数据提取和转换：extractor.py 流式解析 CSV/JSON/Excel，transform_sandbox.py 在子进程沙箱中安全执行清洗代码。",
+      "nodeIds": [
+        "file:etl-service/src/etl/extractor.py",
+        "file:etl-service/src/etl/transform_sandbox.py",
+        "file:etl-service/src/etl/_sandbox_runner.py"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "数据路由与加载",
+      "description": "理解月表路由和批量加载：table_router.py 按分区字段路由到月表，loader.py 用 INSERT IGNORE 保证幂等，encryption.py 加密敏感字段。",
+      "nodeIds": [
+        "file:etl-service/src/etl/table_router.py",
+        "file:etl-service/src/etl/loader.py",
+        "file:etl-service/src/etl/encryption.py",
+        "file:etl-service/src/etl/monthly_lifecycle.py"
+      ]
+    },
+    {
+      "order": 7,
+      "title": "基础设施：数据库与状态",
+      "description": "了解数据库和状态管理：database.py 实现读写分离连接池，state_tracker.py 用原子 SQL 消除认领竞态，cache.py 提供 TTL+LRU 本地缓存。",
+      "nodeIds": [
+        "file:etl-service/src/infrastructure/database.py",
+        "file:etl-service/src/infrastructure/state_tracker.py",
+        "file:etl-service/src/infrastructure/cache.py"
+      ]
+    },
+    {
+      "order": 8,
+      "title": "高可用与容错",
+      "description": "理解高可用和容错机制：ha_elector.py 乐观锁选主，worker_pool.py 线程池+熔断器+Supervisor自动重启，file_archiver.py 跨分区安全归档。",
+      "nodeIds": [
+        "file:etl-service/src/infrastructure/ha_elector.py",
+        "file:etl-service/src/infrastructure/worker_pool.py",
+        "file:etl-service/src/infrastructure/file_archiver.py"
+      ]
+    },
+    {
+      "order": 9,
+      "title": "文件监控与任务管理",
+      "description": "了解文件检测和任务管理：event_handler.py watchdog防抖，polling_scanner.py 增量轮询兜底，task_manager.py 多任务生命周期管理。",
+      "nodeIds": [
+        "file:etl-service/src/watcher/event_handler.py",
+        "file:etl-service/src/watcher/polling_scanner.py",
+        "file:etl-service/src/core/task_manager.py"
+      ]
+    },
+    {
+      "order": 10,
+      "title": "Web API 与监控告警",
+      "description": "探索 Web 管理接口和监控：auth.py JWT认证+RBAC，app.py Flask工厂，alerting.py 钉钉告警，metrics.py Prometheus指标。",
+      "nodeIds": [
+        "file:etl-service/src/web/app.py",
+        "file:etl-service/src/web/auth.py",
+        "file:etl-service/src/monitoring/alerting.py",
+        "file:etl-service/src/monitoring/metrics.py",
+        "file:etl-service/src/monitoring/quality_reporter.py"
+      ]
+    }
+  ]
+}

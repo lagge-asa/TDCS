@@ -1,0 +1,2788 @@
+T
+T
+Timed Data Collection Service on the Laboratory Side
+
+
+
+
+开发文档.txt
+Text
+我已经仔细阅读了这份完整的开发文档。这是一个相当复杂的系统设计，涉及多个技术领域。让我为您梳理一下关键信息。
+
+📋 文件夹监控 ETL 服务 — 项目概览
+核心目标
+开发一个 Windows 服务程序，实时监控文件夹，对新增文件执行可配置的 ETL（提取-转换-加载）流程，将数据按月写入 MySQL。
+
+系统架构（13 个核心模块）
+文件监控
+文件监控
+文件监控
+文件监控
+FileWatcherwatchdog事件监听
+TaskQueue线程安全队列
+WorkerPool消费者线程池
+Extractor解析文件
+Transformer清洗转换
+Loader批量写入MySQL
+TableRouter按月分表
+StateTracker文件状态跟踪
+ConfigManagerYAML热加载
+Encryption字段加密
+HAElector主备选举
+CacheManagerRedis/本地缓存
+WebUIFlask管理界面
+WinServiceWindows服务
+技术栈
+领域	技术选型
+语言	Python
+文件监控	watchdog
+数据库	MySQL（主从）+ SQLAlchemy
+缓存	Redis + cachetools
+Web	Flask + Bootstrap + Ace Editor
+加密	cryptography (Fernet / AES-GCM)
+Windows服务	pywin32
+打包	PyInstaller + Inno Setup
+高可用	MySQL心跳表 Leader 选举
+监控	Prometheus + Webhook 告警
+关键设计决策
+按月分表 — 根据业务日期自动创建/路由到月表，使用用户自定义 SQL 模板建表
+动态清洗代码 — 用户编写 Python 清洗函数，运行时 importlib.reload 热更新
+主备高可用 — 基于 MySQL 心跳表的 Leader 选举，Standby 检测超时自动接管
+事件驱动 + 防抖 — watchdog 实时监听 + 延迟去抖 + 文件稳定性检查
+应用层加密 — 敏感字段（身份证、手机号）在写入前加密
+读写分离 — 主库写入，从库读取，Redis 缓存加速高频查询
+🚀 接下来您想做什么？
+我可以帮助您：
+
+制定开发计划 — 按模块拆分开发任务，排出优先级和里程碑
+实现具体模块 — 为某个模块编写完整的 Python 代码（如 FileWatcher、TableRouter、WebUI 等）
+搭建项目结构 — 创建完整的目录结构和脚手架代码
+生成配置文件 — 生成 config.yaml、SQL 模板、Inno Setup 脚本等
+设计数据库 — 完善所有 SQL 表结构（状态表、Leader 表、业务表等）
+请告诉我您希望从哪里开始？
+
+完善这份计划
+
+现在我来分析文档中的不足之处，并制定一份完善的开发计划。
+
+文件夹监控 ETL 服务 — 完善开发计划
+基于原始设计文档的全面补充与落地实施指南。文档识别了原始设计中的 20+ 处缺失/不足，逐一补充完善，并给出分阶段开发路线图。
+
+第一部分：原始设计文档缺失分析
+1.1 设计层面缺失
+#	缺失项	影响	补充方案
+1	定时轮询兜底机制未设计	文档标题提到"事件驱动 + 定时轮询兜底"，但正文中只有事件驱动代码，无轮询方案	新增 PollingScanner 模块，设计轮询间隔、增量扫描逻辑
+2	ETL Pipeline 抽象层缺失	Extractor/Transformer/Loader 各自独立，无统一 Pipeline 编排	设计 ETL Pipeline 基类，支持 Extract→Transform→Load 的标准化流程与中间件钩子
+3	异常分类体系未设计	error_handling 只提了重试次数和死信目录，无异常分级	设计可重试异常 / 致命异常 / 跳过异常三级分类，每级有不同处理策略
+4	文件归档策略缺失	处理完成的文件留在原目录？移动？删除？未说明	设计三种归档模式：keep（保留原位）/ move（移至归档目录）/ delete（处理成功后删除）
+5	数据一致性保证	多实例场景下，同一文件被两个实例同时处理的风险未充分说明	补充分布式锁方案（基于 MySQL GET_LOCK() 或 Redis SET NX）
+6	配置校验机制	YAML 配置修改后无校验，错误配置可能导致服务崩溃	设计 ConfigValidator，配置热加载前校验关键字段的类型、范围、必填项
+7	数据质量报告	ETL 过程中数据质量（空值率、异常值、格式错误）无度量	新增 DataQualityReporter 模块，每批次产出质量报告
+8	多租户/多任务支持	当前设计只支持监控一个文件夹、一套 ETL 规则	设计 Task（任务）概念，每个任务绑定独立的文件夹、清洗代码、SQL 模板、目标表
+9	API 接口规范	Web UI 的后端 API 无版本化、无 OpenAPI 文档	设计 RESTful API 规范，使用 Flask Blueprint 分组，生成 OpenAPI 3.0 文档
+10	审计日志	谁在什么时间修改了配置/代码/手动触发了什么操作，无记录	设计 AuditLog 表，记录所有管理操作的变更历史
+1.2 技术层面缺失
+#	缺失项	补充方案
+11	Python 依赖清单	无 requirements.txt / pyproject.toml，第三方库版本未锁定
+12	数据库迁移方案	无 Alembic 或类似工具管理表结构变更
+13	单元测试策略	无测试框架选型、覆盖率要求、Mock 策略
+14	日志结构化	logging 只配了基础参数，无 JSON 结构化日志、无 trace_id 追踪
+15	大文件处理	无流式读取方案，GB 级文件可能导致内存溢出
+16	并发控制细节	Worker 线程异常退出后的恢复机制未设计
+17	Web 安全	无 CSRF 防护、无 Session 管理、无 API Rate Limiting
+18	备份与恢复	配置文件、清洗代码、SQL 模板的备份机制未提及
+19	性能基准	无吞吐量目标（如 X 文件/分钟、Y 行/秒），无法评估系统容量
+20	编码规范	无代码风格指南、无 Lint 配置、无 Git 分支策略
+21	容器化支持	仅设计 Windows 服务，无 Docker 化部署选项（开发/测试用）
+22	CI/CD 流水线	无自动化构建、测试、发布流程
+第二部分：补充设计方案
+2.1 多任务支持（Task 模型）
+核心变更：将单一监控升级为多任务并行，每个任务绑定独立的文件夹、ETL 规则和目标表。
+
+yaml
+
+# config.yaml 新增 tasks 数组
+tasks:
+  - task_id: "order_import"
+    name: "订单数据导入"
+    enabled: true
+    monitor:
+      folder_path: "D:\\data\\orders"
+      file_extensions: [".csv"]
+      recursive: false
+    etl:
+      extractor: "csv"
+      transformer_module: "custom_etl.order_cleaner"
+      transformer_function: "transform"
+    table:
+      base_table: "order_data"
+      partition_field: "business_date"
+      create_table_template: "sql_templates/order_template.sql"
+    archive:
+      mode: "move"                    # keep / move / delete
+      archive_dir: "D:\\data\\archive\\orders"
+    schedule:
+      poll_interval: 60               # 轮询间隔（秒），0 表示仅事件驱动
+
+  - task_id: "user_import"
+    name: "用户数据导入"
+    enabled: true
+    monitor:
+      folder_path: "D:\\data\\users"
+      file_extensions: [".json", ".xlsx"]
+      recursive: true
+    etl:
+      extractor: "auto"               # auto 根据扩展名自动选择
+      transformer_module: "custom_etl.user_cleaner"
+      transformer_function: "transform"
+    table:
+      base_table: "user_data"
+      partition_field: "register_date"
+      create_table_template: "sql_templates/user_template.sql"
+    archive:
+      mode: "keep"
+    schedule:
+      poll_interval: 120
+任务管理器
+任务管理器
+任务管理器
+TaskManager加载/调度/生命周期
+Task: order_import📁 D:\data\orders🔍 CSV → 清洗 → order_data
+Task: user_import📁 D:\data\users🔍 JSON/XLSX → 清洗 → user_data
+Task: ...可扩展更多任务
+共享任务队列
+工作线程池
+MySQL
+2.2 定时轮询兜底（PollingScanner）
+事件驱动可能因 OS 缓冲区溢出、网络文件系统等原因丢失事件，定时轮询作为兜底。
+
+python
+
+class PollingScanner:
+    """定时全量/增量扫描，弥补事件监听遗漏"""
+
+    def __init__(self, task_config, state_tracker, task_queue):
+        self.task_config = task_config
+        self.state_tracker = state_tracker
+        self.task_queue = task_queue
+        self._stop_event = threading.Event()
+
+    def start(self):
+        """启动轮询线程"""
+        interval = self.task_config.schedule.poll_interval
+        if interval <= 0:
+            return  # 仅事件驱动模式
+        thread = threading.Thread(target=self._poll_loop, daemon=True)
+        thread.start()
+
+    def _poll_loop(self):
+        while not self._stop_event.is_set():
+            self._scan_folder()
+            self._stop_event.wait(self.task_config.schedule.poll_interval)
+
+    def _scan_folder(self):
+        """扫描文件夹，将未处理的文件入队"""
+        folder = self.task_config.monitor.folder_path
+        extensions = self.task_config.monitor.file_extensions
+        for root, dirs, files in os.walk(folder):
+            for fname in files:
+                if any(fname.endswith(ext) for ext in extensions):
+                    fpath = os.path.join(root, fname)
+                    if not self.state_tracker.is_processed(fpath):
+                        self.task_queue.put((self.task_config.task_id, fpath))
+2.3 ETL Pipeline 编排
+将 Extract → Transform → Load 统一编排，支持前置/后置钩子。
+
+python
+
+class ETLPipeline:
+    """标准 ETL 流水线"""
+
+    def __init__(self, extractor, transformer, table_router, loader, encryption=None):
+        self.extractor = extractor
+        self.transformer = transformer
+        self.table_router = table_router
+        self.loader = loader
+        self.encryption = encryption
+        self._pre_hooks = []    # 前置钩子（如：记录开始时间、初始化计数器）
+        self._post_hooks = []   # 后置钩子（如：发送通知、更新质量报告）
+
+    def add_pre_hook(self, hook):
+        self._pre_hooks.append(hook)
+
+    def add_post_hook(self, hook):
+        self._post_hooks.append(hook)
+
+    def execute(self, file_path, task_config) -> PipelineResult:
+        """执行完整 ETL 流程"""
+        context = PipelineContext(file_path=file_path, task_config=task_config)
+
+        try:
+            # 1. 前置钩子
+            for hook in self._pre_hooks:
+                hook(context)
+
+            # 2. Extract
+            rows = self.extractor.extract(file_path)
+            context.raw_count = len(rows)
+
+            # 3. Transform
+            transformed = []
+            for row in rows:
+                result = self.transformer.transform(row)
+                if result is not None:  # None 表示过滤掉
+                    transformed.append(result)
+            context.transformed_count = len(transformed)
+
+            # 4. Encryption
+            if self.encryption:
+                transformed = self.encryption.encrypt_fields(transformed)
+
+            # 5. Route & Load（按月表分组）
+            grouped = self.table_router.group_by_table(transformed, task_config)
+            for table_name, table_rows in grouped.items():
+                self.table_router.ensure_table_exists(table_name, task_config)
+                self.loader.load(table_name, table_rows)
+
+            context.status = PipelineStatus.SUCCESS
+
+        except RetryableError as e:
+            context.status = PipelineStatus.RETRY
+            context.error = e
+        except FatalError as e:
+            context.status = PipelineStatus.FAILED
+            context.error = e
+        except SkipFileError as e:
+            context.status = PipelineStatus.SKIPPED
+            context.error = e
+
+        # 6. 后置钩子
+        for hook in self._post_hooks:
+            hook(context)
+
+        return PipelineResult.from_context(context)
+2.4 异常分类体系
+python
+
+class ETLError(Exception):
+    """ETL 基础异常"""
+    pass
+
+class RetryableError(ETLError):
+    """可重试异常 — 网络超时、数据库连接断开、文件被占用等
+    处理策略：按退避策略重试，超过 max_retries 后进入死信目录"""
+    pass
+
+class FatalError(ETLError):
+    """致命异常 — 配置错误、SQL 语法错误、加密密钥无效等
+    处理策略：不重试，立即进入死信目录，触发告警"""
+    pass
+
+class SkipFileError(ETLError):
+    """跳过异常 — 文件格式不支持、空文件、文件已处理等
+    处理策略：标记为 SKIPPED，不重试，不入死信目录"""
+    pass
+
+class DataQualityError(ETLError):
+    """数据质量异常 — 单行数据格式错误
+    处理策略：记录错误行，可选择跳过该行继续或整文件回滚"""
+    pass
+
+# 重试退避策略
+RETRY_BACKOFF = {
+    1: 5,      # 第1次重试：等待 5秒
+    2: 30,     # 第2次重试：等待 30秒
+    3: 120,    # 第3次重试：等待 120秒
+}
+2.5 文件归档策略
+yaml
+
+# config.yaml 中每个 task 的 archive 配置
+archive:
+  mode: "move"                      # keep / move / delete
+  archive_dir: "D:\\data\\archive"  # mode=move 时的目标目录
+  retain_structure: true             # 是否保留原始目录结构
+  compress: true                     # 归档后是否压缩为 .zip
+  compress_after_days: 7             # 归档 N 天后压缩
+  cleanup_after_days: 90             # 归档 N 天后自动删除
+python
+
+class FileArchiver:
+    def archive(self, file_path: str, config: ArchiveConfig) -> None:
+        if config.mode == "keep":
+            pass  # 不做任何处理
+        elif config.mode == "move":
+            dest = self._build_archive_path(file_path, config)
+            shutil.move(file_path, dest)
+        elif config.mode == "delete":
+            os.remove(file_path)
+2.6 配置校验（ConfigValidator）
+python
+
+class ConfigValidator:
+    """配置文件校验器，热加载前必须通过校验"""
+
+    SCHEMA = {
+        "monitor.folder_path": {"type": str, "required": True, "check": "path_exists"},
+        "monitor.file_extensions": {"type": list, "required": True, "min_items": 1},
+        "concurrency.worker_threads": {"type": int, "min": 1, "max": 32},
+        "concurrency.queue_maxsize": {"type": int, "min": 10, "max": 10000},
+        "database.master.host": {"type": str, "required": True},
+        "database.master.port": {"type": int, "min": 1, "max": 65535},
+        "encryption.algorithm": {"type": str, "choices": ["fernet", "aes_gcm"]},
+        "web.port": {"type": int, "min": 1024, "max": 65535},
+    }
+
+    def validate(self, config: dict) -> ValidationResult:
+        errors = []
+        warnings = []
+        for path, rules in self.SCHEMA.items():
+            value = self._get_nested(config, path)
+            # 检查必填、类型、范围等
+            ...
+        # 额外的跨字段校验
+        if config.get("high_availability", {}).get("enabled"):
+            if config.get("state_storage", {}).get("type") != "mysql":
+                errors.append("HA 模式下 state_storage 必须为 mysql")
+        return ValidationResult(errors, warnings)
+2.7 数据质量报告
+sql
+
+-- 数据质量日志表
+CREATE TABLE data_quality_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    file_path VARCHAR(500),
+    batch_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_rows INT DEFAULT 0,
+    valid_rows INT DEFAULT 0,
+    skipped_rows INT DEFAULT 0,
+    error_rows INT DEFAULT 0,
+    error_details JSON,              -- {"field_errors": {"phone": 15, "id_card": 3}}
+    quality_score DECIMAL(5,2),      -- 0.00~100.00
+    processing_time_ms INT,
+    INDEX idx_task_time (task_id, batch_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+2.8 审计日志
+sql
+
+-- 审计日志表
+CREATE TABLE audit_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_ip VARCHAR(45),
+    action VARCHAR(100) NOT NULL,     -- CONFIG_UPDATE / TEMPLATE_EDIT / CLEANER_EDIT / MANUAL_TRIGGER / RETRY / SERVICE_START / SERVICE_STOP
+    target VARCHAR(200),              -- 操作对象
+    detail JSON,                      -- 变更详情
+    instance_id VARCHAR(100),
+    INDEX idx_time (timestamp),
+    INDEX idx_action (action)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+2.9 分布式锁（防重复处理）
+python
+
+class DistributedLock:
+    """基于 MySQL GET_LOCK() 的分布式锁"""
+
+    def acquire(self, cursor, file_path: str, timeout: int = 5) -> bool:
+        lock_name = f"etl_file_{hashlib.md5(file_path.encode()).hexdigest()}"
+        cursor.execute("SELECT GET_LOCK(%s, %s)", (lock_name, timeout))
+        result = cursor.fetchone()[0]
+        return result == 1
+
+    def release(self, cursor, file_path: str) -> None:
+        lock_name = f"etl_file_{hashlib.md5(file_path.encode()).hexdigest()}"
+        cursor.execute("SELECT RELEASE_LOCK(%s)", (lock_name,))
+2.10 大文件流式处理
+python
+
+class StreamingExtractor:
+    """大文件流式读取，避免内存溢出"""
+
+    # 文件大小阈值（超过此值使用流式处理）
+    STREAM_THRESHOLD = 100 * 1024 * 1024  # 100MB
+
+    def extract(self, file_path: str, transformer) -> Iterator[List[dict]]:
+        """按批次 yield 数据，每批 batch_size 行"""
+        file_size = os.path.getsize(file_path)
+        batch_size = 1000 if file_size > self.STREAM_THRESHOLD else None
+
+        ext = Path(file_path).suffix.lower()
+        if ext == ".csv":
+            yield from self._stream_csv(file_path, batch_size)
+        elif ext == ".json":
+            yield from self._stream_json(file_path, batch_size)
+        elif ext in (".xlsx", ".xls"):
+            # Excel 文件不支持真正的流式读取，使用 openpyxl read-only 模式
+            yield from self._stream_excel(file_path, batch_size)
+
+    def _stream_csv(self, file_path, batch_size):
+        import csv
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            batch = []
+            for row in reader:
+                batch.append(row)
+                if batch_size and len(batch) >= batch_size:
+                    yield batch
+                    batch = []
+            if batch:
+                yield batch
+
+    def _stream_json(self, file_path, batch_size):
+        import ijson  # 流式 JSON 解析器
+        with open(file_path, 'rb') as f:
+            batch = []
+            for item in ijson.items(f, 'item'):
+                batch.append(item)
+                if batch_size and len(batch) >= batch_size:
+                    yield batch
+                    batch = []
+            if batch:
+                yield batch
+2.11 结构化日志与追踪
+python
+
+import logging
+import json
+import uuid
+from datetime import datetime
+
+class StructuredFormatter(logging.Formatter):
+    """JSON 结构化日志"""
+
+    def format(self, record):
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "trace_id": getattr(record, "trace_id", ""),
+            "task_id": getattr(record, "task_id", ""),
+            "file_path": getattr(record, "file_path", ""),
+            "instance_id": getattr(record, "instance_id", ""),
+        }
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry, ensure_ascii=False)
+
+
+class TraceContext:
+    """追踪上下文管理器"""
+
+    def __init__(self, task_id=None, file_path=None):
+        self.trace_id = str(uuid.uuid4())[:8]
+        self.task_id = task_id
+        self.file_path = file_path
+2.12 Web API 规范
+plain text
+
+API 版本前缀: /api/v1
+
+# 认证
+POST   /api/v1/auth/login          # 登录获取 Token
+POST   /api/v1/auth/logout         # 注销
+
+# 任务管理
+GET    /api/v1/tasks               # 获取任务列表
+GET    /api/v1/tasks/{task_id}     # 获取任务详情
+PUT    /api/v1/tasks/{task_id}     # 更新任务配置
+POST   /api/v1/tasks/{task_id}/trigger  # 手动触发扫描
+
+# 文件处理状态
+GET    /api/v1/files               # 文件列表（分页、筛选）
+GET    /api/v1/files/{file_id}     # 文件详情
+POST   /api/v1/files/retry         # 批量重试失败文件
+
+# SQL 模板管理
+GET    /api/v1/templates           # 模板列表
+GET    /api/v1/templates/{name}    # 获取模板内容
+PUT    /api/v1/templates/{name}    # 更新模板
+DELETE /api/v1/templates/{name}    # 删除模板
+
+# 清洗代码管理
+GET    /api/v1/cleaners            # 清洗模块列表
+GET    /api/v1/cleaners/{name}     # 获取清洗代码
+PUT    /api/v1/cleaners/{name}     # 更新清洗代码
+POST   /api/v1/cleaners/{name}/test # 测试清洗代码（传入样例数据）
+
+# 系统管理
+GET    /api/v1/health              # 健康检查
+GET    /api/v1/metrics             # Prometheus 指标
+GET    /api/v1/logs                # 日志查询
+GET    /api/v1/dashboard           # 仪表盘数据
+GET    /api/v1/config              # 获取配置
+PUT    /api/v1/config              # 更新配置
+GET    /api/v1/audit               # 审计日志
+
+# 数据质量
+GET    /api/v1/quality/{task_id}   # 数据质量报告
+2.13 Web 安全加固
+python
+
+# Flask 安全配置
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False   # 本地部署可为 False
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
+
+# CSRF 防护
+from flask_wtf.csrf import CSRFProtect
+csrf = CSRFProtect(app)
+
+# Rate Limiting
+from flask_limiter import Limiter
+limiter = Limiter(app, key_func=get_remote_address,
+                  default_limits=["200 per minute"])
+
+# API Token 认证（替代 Basic Auth）
+from flask_httpauth import TokenAuth
+token_auth = TokenAuth()
+2.14 Worker 健康监控与自动恢复
+python
+
+class WorkerSupervisor:
+    """工作线程健康监控与自动恢复"""
+
+    def __init__(self, worker_threads: list, check_interval=30):
+        self.workers = worker_threads
+        self.check_interval = check_interval
+        self._stop_event = threading.Event()
+
+    def start(self):
+        thread = threading.Thread(target=self._supervise_loop, daemon=True)
+        thread.start()
+
+    def _supervise_loop(self):
+        while not self._stop_event.is_set():
+            for i, worker in enumerate(self.workers):
+                if not worker.is_alive():
+                    logger.warning(f"Worker-{i} 已死亡，正在重启...")
+                    self._restart_worker(i)
+            self._stop_event.wait(self.check_interval)
+
+    def _restart_worker(self, index):
+        old_worker = self.workers[index]
+        new_worker = threading.Thread(
+            target=old_worker._target,
+            args=old_worker._args,
+            kwargs=old_worker._kwargs,
+            daemon=True,
+            name=f"Worker-{index}"
+        )
+        self.workers[index] = new_worker
+        new_worker.start()
+第三部分：项目目录结构
+plain text
+
+etl-service/
+├── src/
+│   ├── __init__.py
+│   ├── main.py                      # 程序入口（CLI / 服务模式）
+│   ├── service.py                   # Windows 服务封装
+│   │
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py                # ConfigManager + ConfigValidator
+│   │   ├── task_manager.py          # 多任务管理器
+│   │   ├── pipeline.py              # ETL Pipeline 编排
+│   │   ├── pipeline_context.py      # Pipeline 上下文
+│   │   └── exceptions.py            # 异常分类体系
+│   │
+│   ├── watcher/
+│   │   ├── __init__.py
+│   │   ├── event_handler.py         # watchdog 事件处理 + 防抖
+│   │   ├── polling_scanner.py       # 定时轮询兜底
+│   │   └── file_stability.py        # 文件稳定性检查
+│   │
+│   ├── etl/
+│   │   ├── __init__.py
+│   │   ├── extractor.py             # 文件解析（CSV/JSON/Excel）
+│   │   ├── extractor_streaming.py   # 大文件流式解析
+│   │   ├── transformer.py           # 动态清洗代码加载
+│   │   ├── table_router.py          # 按月分表路由
+│   │   ├── loader.py                # MySQL 批量加载器
+│   │   └── encryption.py            # 字段加密模块
+│   │
+│   ├── infrastructure/
+│   │   ├── __init__.py
+│   │   ├── database.py              # 数据库连接池 + 读写分离
+│   │   ├── cache.py                 # 缓存管理（本地 + Redis）
+│   │   ├── state_tracker.py         # 文件处理状态追踪
+│   │   ├── distributed_lock.py      # 分布式锁
+│   │   ├── ha_elector.py            # Leader 选举
+│   │   ├── queue.py                 # 任务队列
+│   │   ├── worker_pool.py           # 工作线程池 + 健康监控
+│   │   └── file_archiver.py         # 文件归档
+│   │
+│   ├── web/
+│   │   ├── __init__.py
+│   │   ├── app.py                   # Flask 应用工厂
+│   │   ├── auth.py                  # 认证模块
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── tasks.py             # 任务管理 API
+│   │   │   ├── files.py             # 文件状态 API
+│   │   │   ├── templates.py         # SQL 模板管理 API
+│   │   │   ├── cleaners.py          # 清洗代码管理 API
+│   │   │   ├── config.py            # 配置管理 API
+│   │   │   ├── logs.py              # 日志查询 API
+│   │   │   ├── quality.py           # 数据质量 API
+│   │   │   └── system.py            # 健康检查 / 指标 API
+│   │   ├── static/
+│   │   │   ├── css/
+│   │   │   └── js/
+│   │   └── templates/
+│   │       ├── base.html
+│   │       ├── dashboard.html
+│   │       ├── config.html
+│   │       ├── templates.html
+│   │       ├── cleaner.html
+│   │       ├── logs.html
+│   │       ├── files.html
+│   │       └── quality.html
+│   │
+│   ├── monitoring/
+│   │   ├── __init__.py
+│   │   ├── metrics.py               # Prometheus 指标
+│   │   ├── quality_reporter.py       # 数据质量报告
+│   │   └── alerting.py               # 告警通知（钉钉/企微/邮件）
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── logging_config.py         # 结构化日志配置
+│       ├── trace.py                  # Trace 上下文
+│       └── helpers.py                # 通用工具函数
+│
+├── custom_etl/                       # 用户自定义清洗代码（运行时可编辑）
+│   ├── __init__.py
+│   ├── order_cleaner.py
+│   └── user_cleaner.py
+│
+├── sql_templates/                    # 用户自定义建表模板
+│   ├── order_template.sql
+│   └── user_template.sql
+│
+├── config/
+│   ├── config.yaml                   # 主配置文件
+│   └── logging.yaml                  # 日志配置
+│
+├── scripts/
+│   ├── init_db.sql                   # 数据库初始化脚本
+│   ├── create_service.bat            # 注册 Windows 服务
+│   ├── remove_service.bat            # 卸载 Windows 服务
+│   └── generate_key.py               # 加密密钥生成工具
+│
+├── resources/
+│   ├── web.ico                       # Web 管理图标
+│   ├── service.ico                   # 服务图标
+│   └── tray.ico                      # 托盘图标
+│
+├── installer/
+│   ├── etl_service.spec              # PyInstaller 配置
+│   ├── setup.iss                     # Inno Setup 脚本
+│   └── launch_web.bat                # Web 快捷启动脚本
+│
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py                   # Pytest fixtures
+│   ├── unit/
+│   │   ├── test_extractor.py
+│   │   ├── test_transformer.py
+│   │   ├── test_table_router.py
+│   │   ├── test_loader.py
+│   │   ├── test_encryption.py
+│   │   ├── test_config.py
+│   │   ├── test_pipeline.py
+│   │   └── test_state_tracker.py
+│   ├── integration/
+│   │   ├── test_etl_flow.py
+│   │   ├── test_ha_election.py
+│   │   └── test_web_api.py
+│   └── fixtures/
+│       ├── sample.csv
+│       ├── sample.json
+│       └── sample.xlsx
+│
+├── migrations/                       # Alembic 数据库迁移
+│   ├── env.py
+│   └── versions/
+│
+├── logs/                             # 运行时日志目录
+├── dead_letters/                     # 死信文件目录
+├── archive/                          # 归档文件目录
+│
+├── requirements.txt                  # Python 依赖
+├── requirements-dev.txt              # 开发/测试依赖
+├── pyproject.toml                    # 项目元数据
+├── Dockerfile                        # Docker 构建文件（开发/测试用）
+├── docker-compose.yml                # 本地开发环境（MySQL + Redis）
+├── Makefile                          # 常用命令快捷方式
+├── .flake8                           # Lint 配置
+├── .editorconfig                     # 编辑器配置
+├── LICENSE
+└── README.md
+第四部分：技术选型与依赖清单
+4.1 核心依赖
+plain text
+
+# requirements.txt
+
+# --- 核心框架 ---
+pyyaml>=6.0              # YAML 配置解析
+watchdog>=3.0            # 文件系统事件监控
+
+# --- 数据库 ---
+sqlalchemy>=2.0          # ORM + 连接池
+pymysql>=1.1             # MySQL 驱动
+alembic>=1.12            # 数据库迁移
+
+# --- 数据处理 ---
+openpyxl>=3.1            # Excel 读取
+chardet>=5.2             # 文件编码检测
+ijson>=3.2               # 大 JSON 流式解析
+
+# --- 缓存 ---
+redis>=5.0               # Redis 客户端
+cachetools>=5.3          # 本地 TTL 缓存
+
+# --- 安全/加密 ---
+cryptography>=41.0       # Fernet / AES-GCM 加密
+
+# --- Web ---
+flask>=3.0               # Web 框架
+flask-wtf>=1.2           # CSRF 防护
+flask-limiter>=3.5       # API 限流
+flask-httpauth>=4.8      # HTTP 认证
+flask-socketio>=5.3      # WebSocket（实时日志）
+
+# --- 盻控 ---
+prometheus-client>=0.19  # Prometheus 指标
+psutil>=5.9              # 系统资源监控
+
+# --- 日志 ---
+python-json-logger>=2.0  # JSON 结构化日志
+
+# --- Windows 服务 ---
+pywin32>=306             # Windows 服务 API
+4.2 开发依赖
+plain text
+
+# requirements-dev.txt
+
+pytest>=7.4              # 测试框架
+pytest-cov>=4.1          # 覆盖率
+pytest-mock>=3.11        # Mock
+pytest-flask>=1.3        # Flask 测试
+factory-boy>=3.3         # 测试数据工厂
+faker>=20.0              # 随机数据生成
+flake8>=6.1              # Lint
+black>=23.0              # 代码格式化
+mypy>=1.6                # 类型检查
+4.3 打包工具
+plain text
+
+pyinstaller>=6.0         # 打包为 exe
+pystray>=0.19            # 系统托盘（可选）
+第五部分：数据库完整设计
+5.1 初始化脚本 (scripts/init_db.sql)
+sql
+
+-- ============================================
+-- ETL 服务数据库初始化脚本
+-- ============================================
+
+CREATE DATABASE IF NOT EXISTS etl_db
+    DEFAULT CHARSET utf8mb4
+    DEFAULT COLLATE utf8mb4_unicode_ci;
+
+USE etl_db;
+
+-- 1. 文件处理状态表
+CREATE TABLE IF NOT EXISTS processed_files (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_size BIGINT,
+    file_modified BIGINT NOT NULL,
+    file_hash VARCHAR(64),                  -- MD5 哈希，防止重复内容
+    status ENUM('PENDING','PROCESSING','SUCCESS','FAILED','SKIPPED') DEFAULT 'PENDING',
+    retry_count INT DEFAULT 0,
+    error_message TEXT,
+    error_type VARCHAR(50),                 -- RetryableError / FatalError / SkipFileError
+    row_count INT DEFAULT 0,
+    valid_row_count INT DEFAULT 0,
+    processing_time_ms INT,
+    instance_id VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP NULL,
+    UNIQUE KEY uk_task_file (task_id, file_path, file_modified),
+    INDEX idx_status (status),
+    INDEX idx_task_status (task_id, status),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2. Leader 选举表
+CREATE TABLE IF NOT EXISTS leader (
+    id INT PRIMARY KEY DEFAULT 1,
+    instance_id VARCHAR(100),
+    last_heartbeat TIMESTAMP NULL,
+    started_at TIMESTAMP NULL,
+    version INT DEFAULT 0                   -- 乐观锁版本号
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO leader (id) VALUES (1);
+
+-- 3. 数据质量日志表
+CREATE TABLE IF NOT EXISTS data_quality_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    file_path VARCHAR(500),
+    batch_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_rows INT DEFAULT 0,
+    valid_rows INT DEFAULT 0,
+    skipped_rows INT DEFAULT 0,
+    error_rows INT DEFAULT 0,
+    error_details JSON,
+    quality_score DECIMAL(5,2),
+    processing_time_ms INT,
+    INDEX idx_task_time (task_id, batch_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 4. 审计日志表
+CREATE TABLE IF NOT EXISTS audit_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_ip VARCHAR(45),
+    user_agent VARCHAR(500),
+    action VARCHAR(100) NOT NULL,
+    target VARCHAR(200),
+    detail JSON,
+    instance_id VARCHAR(100),
+    INDEX idx_time (timestamp),
+    INDEX idx_action (action)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 5. 配置变更历史表
+CREATE TABLE IF NOT EXISTS config_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    config_type ENUM('main','template','cleaner') NOT NULL,
+    config_key VARCHAR(200) NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    changed_by VARCHAR(100),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_type_key (config_type, config_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 6. 汇总统计表（加速查询）
+CREATE TABLE IF NOT EXISTS daily_statistics (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    stat_date DATE NOT NULL,
+    table_name VARCHAR(100),
+    total_files INT DEFAULT 0,
+    success_files INT DEFAULT 0,
+    failed_files INT DEFAULT 0,
+    total_rows INT DEFAULT 0,
+    valid_rows INT DEFAULT 0,
+    avg_quality_score DECIMAL(5,2),
+    avg_processing_time_ms INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_task_date (task_id, stat_date, table_name),
+    INDEX idx_date (stat_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 7. 服务心跳历史表（可选，用于监控页面展示）
+CREATE TABLE IF NOT EXISTS heartbeat_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    instance_id VARCHAR(100) NOT NULL,
+    heartbeat_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('ACTIVE','STANDBY','STARTING','STOPPING'),
+    queue_size INT DEFAULT 0,
+    active_workers INT DEFAULT 0,
+    memory_usage_mb DECIMAL(10,2),
+    cpu_percent DECIMAL(5,2),
+    INDEX idx_instance_time (instance_id, heartbeat_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+5.2 数据库设计 ER 图
+processed_files
+PK
+BIGINT
+id
+VARCHAR
+task_id
+VARCHAR
+file_path
+ENUM
+status
+INT
+retry_count
+VARCHAR
+error_type
+VARCHAR
+instance_id
+leader
+PK
+INT
+id
+VARCHAR
+instance_id
+TIMESTAMP
+last_heartbeat
+INT
+version
+data_quality_log
+PK
+BIGINT
+id
+VARCHAR
+task_id
+INT
+total_rows
+INT
+error_rows
+DECIMAL
+quality_score
+audit_log
+PK
+BIGINT
+id
+VARCHAR
+action
+VARCHAR
+target
+JSON
+detail
+config_history
+PK
+BIGINT
+id
+ENUM
+config_type
+VARCHAR
+config_key
+daily_statistics
+PK
+BIGINT
+id
+VARCHAR
+task_id
+DATE
+stat_date
+INT
+total_files
+heartbeat_history
+PK
+BIGINT
+id
+VARCHAR
+instance_id
+ENUM
+status
+produces
+第六部分：开发阶段规划
+6.1 阶段总览
+阶段	名称	工期	核心交付
+一	核心引擎	~18天	端到端单文件 ETL 跑通
+二	基础设施	~16天	多任务/缓存/加密/日志增强
+三	Web管理界面	~14天	完整可视化管理界面
+四	高可用与监控	~8天	主备切换/Prometheus/告警
+五	打包部署	~10天	安装包/Windows服务/快捷方式
+6.2 甘特图
+mermaid
+
+gantt
+    title ETL 服务开发路线图
+    dateFormat YYYY-MM-DD
+    axisFormat %m/%d
+
+    section 第一阶段：核心引擎
+    项目搭建与目录结构           :a1, 2026-05-20, 1d
+    配置管理模块                :a2, after a1, 2d
+    文件监控与防抖              :a3, after a2, 2d
+    文件解析器(Extractor)       :a4, after a3, 2d
+    清洗代码加载(Transformer)   :a5, after a4, 2d
+    按月分表路由(TableRouter)   :a6, after a5, 2d
+    MySQL加载器(Loader)         :a7, after a6, 2d
+    ETL Pipeline编排            :a8, after a7, 2d
+    单元测试                    :a9, after a8, 3d
+
+    section 第二阶段：基础设施
+    状态追踪与分布式锁          :b1, after a9, 2d
+    工作线程池与健康监控        :b2, after b1, 2d
+    加密模块                    :b3, after b2, 1d
+    缓存管理                    :b4, after b3, 2d
+    定时轮询兜底                :b5, after b4, 1d
+    文件归档                    :b6, after b5, 1d
+    数据质量报告                :b7, after b6, 2d
+    结构化日志与追踪            :b8, after b7, 1d
+    集成测试                    :b9, after b8, 3d
+
+    section 第三阶段：Web管理
+    Flask应用工厂与API框架      :c1, after b9, 2d
+    认证与安全加固              :c2, after c1, 1d
+    仪表盘页面                  :c3, after c2, 2d
+    配置管理页面                :c4, after c3, 1d
+    SQL模板管理                 :c5, after c4, 1d
+    清洗代码编辑器              :c6, after c5, 1d
+    实时日志页面                :c7, after c6, 2d
+    文件列表与重试              :c8, after c7, 1d
+    数据质量页面                :c9, after c8, 1d
+    API测试                     :c10, after c9, 2d
+
+    section 第四阶段：高可用与监控
+    Leader选举                  :d1, after c10, 2d
+    故障转移与恢复              :d2, after d1, 2d
+    Prometheus指标              :d3, after d2, 1d
+    告警通知                    :d4, after d3, 1d
+    HA集成测试                  :d5, after d4, 2d
+
+    section 第五阶段：打包部署
+    Windows服务封装             :e1, after d5, 1d
+    PyInstaller打包             :e2, after e1, 2d
+    Inno Setup安装包            :e3, after e2, 2d
+    快捷方式与托盘              :e4, after e3, 1d
+    端到端测试                  :e5, after e4, 2d
+    文档与交付                  :e6, after e5, 2d
+6.3 第一阶段详细任务：核心引擎
+目标：实现端到端的单文件 ETL 流程 — 监控文件夹 → 读取文件 → 清洗 → 分表写入数据库。
+
+任务	产出	验收标准
+项目搭建	目录结构 + pyproject.toml + requirements.txt	pip install -e . 成功
+配置管理	ConfigManager + ConfigValidator	能正确加载 YAML 配置并校验
+文件监控	DebouncedHandler + FileStabilityChecker	放入文件后 3 秒内入队
+文件解析	Extractor (CSV/JSON/XLSX)	三种格式均正确解析为字典列表
+清洗代码	Transformer + 动态加载	修改 .py 文件后 10 秒内生效
+分表路由	TableRouter + SQL 模板	自动创建 order_data_202601 格式表
+数据加载	Loader + 事务	批量插入成功，失败回滚
+Pipeline	ETLPipeline 编排	完整流程跑通，有结构化日志
+6.4 第二阶段详细任务：基础设施
+任务	产出	验收标准
+状态追踪	StateTracker + MySQL 存储	文件重启后不重复处理
+分布式锁	DistributedLock (MySQL GET_LOCK)	多实例不重复处理同一文件
+工作线程池	WorkerPool + WorkerSupervisor	线程异常死亡后自动重启
+加密	Encryption (Fernet/AES-GCM)	加密后可正确解密
+缓存	CacheManager (Redis + Local)	缓存命中率 > 80%
+轮询兜底	PollingScanner	事件遗漏的文件在轮询周期内被发现
+文件归档	FileArchiver (move/delete/keep)	三种模式均正常工作
+质量报告	DataQualityReporter	每批次产出质量评分
+日志追踪	StructuredFormatter + TraceContext	全链路 trace_id 可追踪
+6.5 第三阶段详细任务：Web管理界面
+任务	产出	验收标准
+Flask 工厂	app.py + Blueprint 分组	/api/v1/health 返回 200
+认证安全	Token Auth + CSRF + Rate Limit	未认证请求返回 401
+仪表盘	实时统计 + 图表	显示队列/处理量/成功率
+配置管理	YAML 编辑 + 热加载	保存后配置立即生效
+模板管理	SQL 模板 CRUD	在线编辑/测试 SQL
+代码编辑	Ace Editor + 语法高亮	编辑清洗代码并测试
+实时日志	WebSocket 日志流	日志实时推送无延迟
+文件列表	分页 + 筛选 + 重试	支持按状态/时间筛选
+质量页面	趋势图 + 错误明细	可查看质量变化趋势
+审计日志	操作记录查询	所有管理操作有迹可循
+6.6 第四阶段详细任务：高可用与监控
+任务	产出	验收标准
+Leader 选举	HAElector (MySQL 心跳)	Standby 在心跳超时后 15 秒内接管
+故障转移	自动启动/停止组件	新 Active 完成全量扫描补漏
+Prometheus	/metrics 指标暴露	Grafana 可正常采集展示
+告警	钉钉/企微/邮件通知	失败超阈值后 1 分钟内告警
+HA 测试	模拟故障场景	拔网线/杀进程均能自动恢复
+6.7 第五阶段详细任务：打包部署
+任务	产出	验收标准
+Windows 服务	service.py (pywin32)	sc start/stop 正常工作
+PyInstaller	etl_engine.exe	双击可运行完整功能
+Inno Setup	ETL_Service_Setup.exe	安装向导引导配置 MySQL 等
+快捷方式	桌面图标 + 托盘	点击图标打开 Web 管理
+端到端测试	全流程验证	安装 → 配置 → 运行 → 卸载
+文档	README + 运维手册	新人可独立完成部署
+第七部分：测试策略
+7.1 测试分层
+端到端测试 10~15个
+集成测试 30~40个
+单元测试 100+个
+7.2 单元测试重点
+模块	测试重点	Mock 对象
+Extractor	CSV/JSON/XLSX 解析、编码检测、空文件处理	文件系统
+Transformer	动态加载、热更新、异常清洗函数处理	importlib
+TableRouter	月表名生成、模板替换、建表 SQL 执行	数据库连接
+Loader	批量插入、事务回滚、连接池复用	数据库连接
+Encryption	加密/解密一致性、密钥无效处理	无需 Mock
+ConfigManager	YAML 解析、环境变量替换、校验规则	文件系统
+StateTracker	状态查询/更新、分布式锁竞争	数据库连接
+HAElector	选举竞争、心跳超时、故障转移	数据库连接
+7.3 集成测试场景
+场景	描述	预期结果
+端到端 ETL	放入 CSV → 解析 → 清洗 → 写入月表	数据正确入库
+异常重试	模拟数据库连接断开	重试 3 次后进入死信
+大文件处理	放入 500MB CSV	流式处理，内存不超 512MB
+多任务并行	两个任务同时放入文件	各自独立处理，不交叉
+配置热加载	运行中修改 YAML	新配置生效，旧任务完成
+清洗代码热更新	运行中修改 .py	新文件使用新逻辑
+死信恢复	手动重试死信文件	重新处理成功
+7.4 测试覆盖率目标
+层级	目标覆盖率
+核心引擎 (core/, etl/)	>= 90%
+基础设施 (infrastructure/)	>= 80%
+Web API (web/api/)	>= 80%
+整体	>= 80%
+第八部分：性能目标与基准
+8.1 吞吐量目标
+指标	目标值	测试条件
+小文件吞吐	>= 100 文件/分钟	单文件 < 1000 行，4 线程
+大文件吞吐	>= 50,000 行/分钟	单文件 > 100,000 行，流式处理
+事件响应延迟	<= 3 秒	文件稳定后到入队
+端到端延迟	<= 10 秒	文件创建到数据入库
+Web API 响应	<= 200ms	P99，不含数据库聚合查询
+8.2 资源限制
+资源	限制
+内存占用	<= 512MB（不含数据库/Redis）
+CPU 空闲	<= 5%（无文件处理时）
+CPU 峰值	<= 80%（全速处理时）
+数据库连接池	写 5 + 读 20
+日志文件大小	单文件 <= 10MB，保留 5 个
+第九部分：编码规范与 Git 策略
+9.1 代码风格
+格式化：Black (line-length=120)
+Lint：flake8 + mypy
+类型注解：所有公共函数必须添加类型注解
+Docstring：Google 风格，所有类和公共函数必须有
+编码：UTF-8，无 BOM
+缩进：4 空格
+9.2 Git 分支策略
+mermaid
+
+gitGraph
+    commit id: "init"
+    branch develop
+    checkout develop
+    commit id: "project setup"
+    branch feature/core-engine
+    checkout feature/core-engine
+    commit id: "config manager"
+    commit id: "file watcher"
+    checkout develop
+    merge feature/core-engine
+    branch feature/infrastructure
+    checkout feature/infrastructure
+    commit id: "state tracker"
+    checkout develop
+    merge feature/infrastructure
+    branch release/v1.0
+    checkout main
+    merge release/v1.0
+    commit id: "v1.0.0" tag: "v1.0.0"
+分支	用途
+main	生产发布，仅通过 merge request 合入
+develop	开发主线，日常合并目标
+feature/*	功能分支
+bugfix/*	缺陷修复
+release/*	发版准备
+hotfix/*	生产紧急修复
+9.3 提交信息规范
+plain text
+
+<type>(<scope>): <subject>
+type	说明
+feat	新功能
+fix	修复缺陷
+refactor	重构
+test	测试相关
+docs	文档
+chore	构建/工具
+perf	性能优化
+第十部分：CI/CD 流水线
+10.1 流水线设计
+Push / PR
+Lint + 类型检查
+单元测试 + 覆盖率
+构建 exe
+Inno Setup 打包
+发布 Release
+Tag v*
+10.2 GitHub Actions 配置要点
+yaml
+
+name: CI/CD Pipeline
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [develop]
+  tags: ['v*']
+
+jobs:
+  lint:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install flake8 black mypy
+      - run: flake8 src/ tests/
+      - run: black --check src/ tests/
+      - run: mypy src/
+
+  test:
+    runs-on: windows-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: etl_test
+      redis:
+        image: redis:7
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest tests/ --cov=src --cov-report=xml --cov-fail-under=80
+
+  build:
+    needs: [lint, test]
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - run: pyinstaller installer/etl_service.spec
+      - run: iscc installer/setup.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ETL_Service_Setup
+          path: installer/Output/ETL_Service_Setup.exe
+
+  release:
+    needs: build
+    steps:
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: installer/Output/ETL_Service_Setup.exe
+第十一部分：Docker 开发环境
+11.1 docker-compose.yml
+yaml
+
+version: '3.8'
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: etl_db
+      MYSQL_USER: etl_user
+      MYSQL_PASSWORD: etl_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+
+volumes:
+  mysql_data:
+11.2 Makefile 快捷命令
+makefile
+
+dev-env:       ## 启动开发环境（MySQL + Redis）
+	docker-compose up -d
+
+dev-stop:      ## 停止开发环境
+	docker-compose down
+
+dev-reset:     ## 重置数据库
+	docker-compose down -v && docker-compose up -d
+
+install:       ## 安装依赖
+	pip install -r requirements.txt -r requirements-dev.txt
+
+test:          ## 运行测试
+	pytest tests/ -v --cov=src
+
+lint:          ## 代码检查
+	flake8 src/ tests/ && black --check src/ tests/ && mypy src/
+
+run:           ## 本地运行（非服务模式）
+	python src/main.py --config config/config.yaml
+
+build:         ## 打包为 exe
+	pyinstaller installer/etl_service.spec
+
+package:       ## 制作安装包
+	iscc installer/setup.iss
+第十二部分：风险与应对
+#	风险	概率	影响	应对措施
+1	watchdog 在网络盘/某些文件系统上不触发事件	中	高	定时轮询兜底已设计，PollingScanner 可覆盖
+2	清洗代码热更新引入 bug 导致数据处理失败	高	高	清洗代码有语法检查入口，失败不替换旧版本
+3	MySQL 连接池耗尽	中	高	连接池监控 + Prometheus 告警 + 慢查询日志
+4	大文件内存溢出	低	高	流式处理 + 100MB 阈值自动切换 + 内存监控
+5	Leader 选举脑裂	低	极高	MySQL 单点写 + 乐观锁版本号 + 心跳超时双重检查
+6	PyInstaller 打包后运行异常	中	中	打包前完整测试 + CI 自动构建验证
+7	Windows 服务权限不足	中	中	安装包以管理员运行 + 配置文件权限检查
+8	加密密钥泄露	低	极高	密钥仅存环境变量 + 不记日志 + 审计追踪
+第十三部分：总结与下一步
+完善内容回顾
+本计划在原始设计文档基础上，补充了以下 8 大类共 22 项 内容：
+
+类别	补充项
+架构增强	多任务支持、ETL Pipeline 编排、分布式锁、Worker 健康监控
+数据保障	异常分类体系、数据质量报告、审计日志、文件归档策略
+性能优化	大文件流式处理、配置校验、结构化日志与 trace_id
+安全加固	Token 认证、CSRF 防护、Rate Limiting
+开发规范	目录结构、依赖清单、编码风格、Git 分支策略
+质量保障	测试分层、覆盖率目标、Mock 策略
+工程化	CI/CD 流水线、Docker 开发环境、Makefile 命令
+项目管理	5 阶段开发路线图、性能基准、风险评估
+下一步建议
+确认技术选型 — 审核依赖清单，确认 Python 版本（建议 3.10+）和 MySQL 版本（建议 8.0+）
+搭建开发环境 — 初始化项目目录，配置 docker-compose 本地环境
+启动第一阶段 — 从配置管理模块开始，逐步推进核心引擎开发
+建立 CI 流水线 — 尽早配置 GitHub Actions，确保代码质量门禁
+准备好后，可以为任意模块生成完整的 Python 实现代码。
+
+
+接受计划
+
+Overlay
+# 文件夹监控 ETL 服务 — 完善开发计划
+
+> 基于原始设计文档的全面补充与落地实施指南。文档识别了原始设计中的 **20+ 处缺失/不足**，逐一补充完善，并给出分阶段开发路线图。
+
+---
+
+## 第一部分：原始设计文档缺失分析
+
+### 1.1 设计层面缺失
+
+| # | 缺失项 | 影响 | 补充方案 |
+|---|--------|------|---------|
+| 1 | **定时轮询兜底机制未设计** | 文档标题提到"事件驱动 + 定时轮询兜底"，但正文中只有事件驱动代码，无轮询方案 | 新增 PollingScanner 模块，设计轮询间隔、增量扫描逻辑 |
+| 2 | **ETL Pipeline 抽象层缺失** | Extractor/Transformer/Loader 各自独立，无统一 Pipeline 编排 | 设计 ETL Pipeline 基类，支持 Extract→Transform→Load 的标准化流程与中间件钩子 |
+| 3 | **异常分类体系未设计** | error_handling 只提了重试次数和死信目录，无异常分级 | 设计可重试异常 / 致命异常 / 跳过异常三级分类，每级有不同处理策略 |
+| 4 | **文件归档策略缺失** | 处理完成的文件留在原目录？移动？删除？未说明 | 设计三种归档模式：`keep`（保留原位）/ `move`（移至归档目录）/ `delete`（处理成功后删除） |
+| 5 | **数据一致性保证** | 多实例场景下，同一文件被两个实例同时处理的风险未充分说明 | 补充分布式锁方案（基于 MySQL `GET_LOCK()` 或 Redis `SET NX`） |
+| 6 | **配置校验机制** | YAML 配置修改后无校验，错误配置可能导致服务崩溃 | 设计 ConfigValidator，配置热加载前校验关键字段的类型、范围、必填项 |
+| 7 | **数据质量报告** | ETL 过程中数据质量（空值率、异常值、格式错误）无度量 | 新增 DataQualityReporter 模块，每批次产出质量报告 |
+| 8 | **多租户/多任务支持** | 当前设计只支持监控一个文件夹、一套 ETL 规则 | 设计 Task（任务）概念，每个任务绑定独立的文件夹、清洗代码、SQL 模板、目标表 |
+| 9 | **API 接口规范** | Web UI 的后端 API 无版本化、无 OpenAPI 文档 | 设计 RESTful API 规范，使用 Flask Blueprint 分组，生成 OpenAPI 3.0 文档 |
+| 10 | **审计日志** | 谁在什么时间修改了配置/代码/手动触发了什么操作，无记录 | 设计 AuditLog 表，记录所有管理操作的变更历史 |
+
+### 1.2 技术层面缺失
+
+| # | 缺失项 | 补充方案 |
+|---|--------|---------|
+| 11 | **Python 依赖清单** | 无 `requirements.txt` / `pyproject.toml`，第三方库版本未锁定 |
+| 12 | **数据库迁移方案** | 无 Alembic 或类似工具管理表结构变更 |
+| 13 | **单元测试策略** | 无测试框架选型、覆盖率要求、Mock 策略 |
+| 14 | **日志结构化** | logging 只配了基础参数，无 JSON 结构化日志、无 trace_id 追踪 |
+| 15 | **大文件处理** | 无流式读取方案，GB 级文件可能导致内存溢出 |
+| 16 | **并发控制细节** | Worker 线程异常退出后的恢复机制未设计 |
+| 17 | **Web 安全** | 无 CSRF 防护、无 Session 管理、无 API Rate Limiting |
+| 18 | **备份与恢复** | 配置文件、清洗代码、SQL 模板的备份机制未提及 |
+| 19 | **性能基准** | 无吞吐量目标（如 X 文件/分钟、Y 行/秒），无法评估系统容量 |
+| 20 | **编码规范** | 无代码风格指南、无 Lint 配置、无 Git 分支策略 |
+| 21 | **容器化支持** | 仅设计 Windows 服务，无 Docker 化部署选项（开发/测试用） |
+| 22 | **CI/CD 流水线** | 无自动化构建、测试、发布流程 |
+
+---
+
+## 第二部分：补充设计方案
+
+### 2.1 多任务支持（Task 模型）
+
+> **核心变更**：将单一监控升级为多任务并行，每个任务绑定独立的文件夹、ETL 规则和目标表。
+
+```yaml
+# config.yaml 新增 tasks 数组
+tasks:
+  - task_id: "order_import"
+    name: "订单数据导入"
+    enabled: true
+    monitor:
+      folder_path: "D:\\data\\orders"
+      file_extensions: [".csv"]
+      recursive: false
+    etl:
+      extractor: "csv"
+      transformer_module: "custom_etl.order_cleaner"
+      transformer_function: "transform"
+    table:
+      base_table: "order_data"
+      partition_field: "business_date"
+      create_table_template: "sql_templates/order_template.sql"
+    archive:
+      mode: "move"                    # keep / move / delete
+      archive_dir: "D:\\data\\archive\\orders"
+    schedule:
+      poll_interval: 60               # 轮询间隔（秒），0 表示仅事件驱动
+
+  - task_id: "user_import"
+    name: "用户数据导入"
+    enabled: true
+    monitor:
+      folder_path: "D:\\data\\users"
+      file_extensions: [".json", ".xlsx"]
+      recursive: true
+    etl:
+      extractor: "auto"               # auto 根据扩展名自动选择
+      transformer_module: "custom_etl.user_cleaner"
+      transformer_function: "transform"
+    table:
+      base_table: "user_data"
+      partition_field: "register_date"
+      create_table_template: "sql_templates/user_template.sql"
+    archive:
+      mode: "keep"
+    schedule:
+      poll_interval: 120
+```
+
+```mermaid
+graph TD
+    subgraph 任务管理器
+        TM[TaskManager<br/>加载/调度/生命周期]
+    end
+    subgraph 任务实例
+        T1["Task: order_import<br/>📁 D:\data\orders<br/>🔍 CSV → 清洗 → order_data"]
+        T2["Task: user_import<br/>📁 D:\data\users<br/>🔍 JSON/XLSX → 清洗 → user_data"]
+        TN["Task: ...<br/>可扩展更多任务"]
+    end
+    subgraph 共享资源
+        Q[共享任务队列]
+        WP[工作线程池]
+        DB[(MySQL)]
+    end
+    TM --> T1
+    TM --> T2
+    TM --> TN
+    T1 --> Q --> WP --> DB
+    T2 --> Q
+    TN --> Q
+```
+
+### 2.2 定时轮询兜底（PollingScanner）
+
+> 事件驱动可能因 OS 缓冲区溢出、网络文件系统等原因丢失事件，定时轮询作为兜底。
+
+```python
+class PollingScanner:
+    """定时全量/增量扫描，弥补事件监听遗漏"""
+
+    def __init__(self, task_config, state_tracker, task_queue):
+        self.task_config = task_config
+        self.state_tracker = state_tracker
+        self.task_queue = task_queue
+        self._stop_event = threading.Event()
+
+    def start(self):
+        """启动轮询线程"""
+        interval = self.task_config.schedule.poll_interval
+        if interval <= 0:
+            return  # 仅事件驱动模式
+        thread = threading.Thread(target=self._poll_loop, daemon=True)
+        thread.start()
+
+    def _poll_loop(self):
+        while not self._stop_event.is_set():
+            self._scan_folder()
+            self._stop_event.wait(self.task_config.schedule.poll_interval)
+
+    def _scan_folder(self):
+        """扫描文件夹，将未处理的文件入队"""
+        folder = self.task_config.monitor.folder_path
+        extensions = self.task_config.monitor.file_extensions
+        for root, dirs, files in os.walk(folder):
+            for fname in files:
+                if any(fname.endswith(ext) for ext in extensions):
+                    fpath = os.path.join(root, fname)
+                    if not self.state_tracker.is_processed(fpath):
+                        self.task_queue.put((self.task_config.task_id, fpath))
+```
+
+### 2.3 ETL Pipeline 编排
+
+> 将 Extract → Transform → Load 统一编排，支持前置/后置钩子。
+
+```python
+class ETLPipeline:
+    """标准 ETL 流水线"""
+
+    def __init__(self, extractor, transformer, table_router, loader, encryption=None):
+        self.extractor = extractor
+        self.transformer = transformer
+        self.table_router = table_router
+        self.loader = loader
+        self.encryption = encryption
+        self._pre_hooks = []    # 前置钩子（如：记录开始时间、初始化计数器）
+        self._post_hooks = []   # 后置钩子（如：发送通知、更新质量报告）
+
+    def add_pre_hook(self, hook):
+        self._pre_hooks.append(hook)
+
+    def add_post_hook(self, hook):
+        self._post_hooks.append(hook)
+
+    def execute(self, file_path, task_config) -> PipelineResult:
+        """执行完整 ETL 流程"""
+        context = PipelineContext(file_path=file_path, task_config=task_config)
+
+        try:
+            # 1. 前置钩子
+            for hook in self._pre_hooks:
+                hook(context)
+
+            # 2. Extract
+            rows = self.extractor.extract(file_path)
+            context.raw_count = len(rows)
+
+            # 3. Transform
+            transformed = []
+            for row in rows:
+                result = self.transformer.transform(row)
+                if result is not None:  # None 表示过滤掉
+                    transformed.append(result)
+            context.transformed_count = len(transformed)
+
+            # 4. Encryption
+            if self.encryption:
+                transformed = self.encryption.encrypt_fields(transformed)
+
+            # 5. Route & Load（按月表分组）
+            grouped = self.table_router.group_by_table(transformed, task_config)
+            for table_name, table_rows in grouped.items():
+                self.table_router.ensure_table_exists(table_name, task_config)
+                self.loader.load(table_name, table_rows)
+
+            context.status = PipelineStatus.SUCCESS
+
+        except RetryableError as e:
+            context.status = PipelineStatus.RETRY
+            context.error = e
+        except FatalError as e:
+            context.status = PipelineStatus.FAILED
+            context.error = e
+        except SkipFileError as e:
+            context.status = PipelineStatus.SKIPPED
+            context.error = e
+
+        # 6. 后置钩子
+        for hook in self._post_hooks:
+            hook(context)
+
+        return PipelineResult.from_context(context)
+```
+
+### 2.4 异常分类体系
+
+```python
+class ETLError(Exception):
+    """ETL 基础异常"""
+    pass
+
+class RetryableError(ETLError):
+    """可重试异常 — 网络超时、数据库连接断开、文件被占用等
+    处理策略：按退避策略重试，超过 max_retries 后进入死信目录"""
+    pass
+
+class FatalError(ETLError):
+    """致命异常 — 配置错误、SQL 语法错误、加密密钥无效等
+    处理策略：不重试，立即进入死信目录，触发告警"""
+    pass
+
+class SkipFileError(ETLError):
+    """跳过异常 — 文件格式不支持、空文件、文件已处理等
+    处理策略：标记为 SKIPPED，不重试，不入死信目录"""
+    pass
+
+class DataQualityError(ETLError):
+    """数据质量异常 — 单行数据格式错误
+    处理策略：记录错误行，可选择跳过该行继续或整文件回滚"""
+    pass
+
+# 重试退避策略
+RETRY_BACKOFF = {
+    1: 5,      # 第1次重试：等待 5秒
+    2: 30,     # 第2次重试：等待 30秒
+    3: 120,    # 第3次重试：等待 120秒
+}
+```
+
+### 2.5 文件归档策略
+
+```yaml
+# config.yaml 中每个 task 的 archive 配置
+archive:
+  mode: "move"                      # keep / move / delete
+  archive_dir: "D:\\data\\archive"  # mode=move 时的目标目录
+  retain_structure: true             # 是否保留原始目录结构
+  compress: true                     # 归档后是否压缩为 .zip
+  compress_after_days: 7             # 归档 N 天后压缩
+  cleanup_after_days: 90             # 归档 N 天后自动删除
+```
+
+```python
+class FileArchiver:
+    def archive(self, file_path: str, config: ArchiveConfig) -> None:
+        if config.mode == "keep":
+            pass  # 不做任何处理
+        elif config.mode == "move":
+            dest = self._build_archive_path(file_path, config)
+            shutil.move(file_path, dest)
+        elif config.mode == "delete":
+            os.remove(file_path)
+```
+
+### 2.6 配置校验（ConfigValidator）
+
+```python
+class ConfigValidator:
+    """配置文件校验器，热加载前必须通过校验"""
+
+    SCHEMA = {
+        "monitor.folder_path": {"type": str, "required": True, "check": "path_exists"},
+        "monitor.file_extensions": {"type": list, "required": True, "min_items": 1},
+        "concurrency.worker_threads": {"type": int, "min": 1, "max": 32},
+        "concurrency.queue_maxsize": {"type": int, "min": 10, "max": 10000},
+        "database.master.host": {"type": str, "required": True},
+        "database.master.port": {"type": int, "min": 1, "max": 65535},
+        "encryption.algorithm": {"type": str, "choices": ["fernet", "aes_gcm"]},
+        "web.port": {"type": int, "min": 1024, "max": 65535},
+    }
+
+    def validate(self, config: dict) -> ValidationResult:
+        errors = []
+        warnings = []
+        for path, rules in self.SCHEMA.items():
+            value = self._get_nested(config, path)
+            # 检查必填、类型、范围等
+            ...
+        # 额外的跨字段校验
+        if config.get("high_availability", {}).get("enabled"):
+            if config.get("state_storage", {}).get("type") != "mysql":
+                errors.append("HA 模式下 state_storage 必须为 mysql")
+        return ValidationResult(errors, warnings)
+```
+
+### 2.7 数据质量报告
+
+```sql
+-- 数据质量日志表
+CREATE TABLE data_quality_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    file_path VARCHAR(500),
+    batch_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_rows INT DEFAULT 0,
+    valid_rows INT DEFAULT 0,
+    skipped_rows INT DEFAULT 0,
+    error_rows INT DEFAULT 0,
+    error_details JSON,              -- {"field_errors": {"phone": 15, "id_card": 3}}
+    quality_score DECIMAL(5,2),      -- 0.00~100.00
+    processing_time_ms INT,
+    INDEX idx_task_time (task_id, batch_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### 2.8 审计日志
+
+```sql
+-- 审计日志表
+CREATE TABLE audit_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_ip VARCHAR(45),
+    action VARCHAR(100) NOT NULL,     -- CONFIG_UPDATE / TEMPLATE_EDIT / CLEANER_EDIT / MANUAL_TRIGGER / RETRY / SERVICE_START / SERVICE_STOP
+    target VARCHAR(200),              -- 操作对象
+    detail JSON,                      -- 变更详情
+    instance_id VARCHAR(100),
+    INDEX idx_time (timestamp),
+    INDEX idx_action (action)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### 2.9 分布式锁（防重复处理）
+
+```python
+class DistributedLock:
+    """基于 MySQL GET_LOCK() 的分布式锁"""
+
+    def acquire(self, cursor, file_path: str, timeout: int = 5) -> bool:
+        lock_name = f"etl_file_{hashlib.md5(file_path.encode()).hexdigest()}"
+        cursor.execute("SELECT GET_LOCK(%s, %s)", (lock_name, timeout))
+        result = cursor.fetchone()[0]
+        return result == 1
+
+    def release(self, cursor, file_path: str) -> None:
+        lock_name = f"etl_file_{hashlib.md5(file_path.encode()).hexdigest()}"
+        cursor.execute("SELECT RELEASE_LOCK(%s)", (lock_name,))
+```
+
+### 2.10 大文件流式处理
+
+```python
+class StreamingExtractor:
+    """大文件流式读取，避免内存溢出"""
+
+    # 文件大小阈值（超过此值使用流式处理）
+    STREAM_THRESHOLD = 100 * 1024 * 1024  # 100MB
+
+    def extract(self, file_path: str, transformer) -> Iterator[List[dict]]:
+        """按批次 yield 数据，每批 batch_size 行"""
+        file_size = os.path.getsize(file_path)
+        batch_size = 1000 if file_size > self.STREAM_THRESHOLD else None
+
+        ext = Path(file_path).suffix.lower()
+        if ext == ".csv":
+            yield from self._stream_csv(file_path, batch_size)
+        elif ext == ".json":
+            yield from self._stream_json(file_path, batch_size)
+        elif ext in (".xlsx", ".xls"):
+            # Excel 文件不支持真正的流式读取，使用 openpyxl read-only 模式
+            yield from self._stream_excel(file_path, batch_size)
+
+    def _stream_csv(self, file_path, batch_size):
+        import csv
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            batch = []
+            for row in reader:
+                batch.append(row)
+                if batch_size and len(batch) >= batch_size:
+                    yield batch
+                    batch = []
+            if batch:
+                yield batch
+
+    def _stream_json(self, file_path, batch_size):
+        import ijson  # 流式 JSON 解析器
+        with open(file_path, 'rb') as f:
+            batch = []
+            for item in ijson.items(f, 'item'):
+                batch.append(item)
+                if batch_size and len(batch) >= batch_size:
+                    yield batch
+                    batch = []
+            if batch:
+                yield batch
+```
+
+### 2.11 结构化日志与追踪
+
+```python
+import logging
+import json
+import uuid
+from datetime import datetime
+
+class StructuredFormatter(logging.Formatter):
+    """JSON 结构化日志"""
+
+    def format(self, record):
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "trace_id": getattr(record, "trace_id", ""),
+            "task_id": getattr(record, "task_id", ""),
+            "file_path": getattr(record, "file_path", ""),
+            "instance_id": getattr(record, "instance_id", ""),
+        }
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry, ensure_ascii=False)
+
+
+class TraceContext:
+    """追踪上下文管理器"""
+
+    def __init__(self, task_id=None, file_path=None):
+        self.trace_id = str(uuid.uuid4())[:8]
+        self.task_id = task_id
+        self.file_path = file_path
+```
+
+### 2.12 Web API 规范
+
+```
+API 版本前缀: /api/v1
+
+# 认证
+POST   /api/v1/auth/login          # 登录获取 Token
+POST   /api/v1/auth/logout         # 注销
+
+# 任务管理
+GET    /api/v1/tasks               # 获取任务列表
+GET    /api/v1/tasks/{task_id}     # 获取任务详情
+PUT    /api/v1/tasks/{task_id}     # 更新任务配置
+POST   /api/v1/tasks/{task_id}/trigger  # 手动触发扫描
+
+# 文件处理状态
+GET    /api/v1/files               # 文件列表（分页、筛选）
+GET    /api/v1/files/{file_id}     # 文件详情
+POST   /api/v1/files/retry         # 批量重试失败文件
+
+# SQL 模板管理
+GET    /api/v1/templates           # 模板列表
+GET    /api/v1/templates/{name}    # 获取模板内容
+PUT    /api/v1/templates/{name}    # 更新模板
+DELETE /api/v1/templates/{name}    # 删除模板
+
+# 清洗代码管理
+GET    /api/v1/cleaners            # 清洗模块列表
+GET    /api/v1/cleaners/{name}     # 获取清洗代码
+PUT    /api/v1/cleaners/{name}     # 更新清洗代码
+POST   /api/v1/cleaners/{name}/test # 测试清洗代码（传入样例数据）
+
+# 系统管理
+GET    /api/v1/health              # 健康检查
+GET    /api/v1/metrics             # Prometheus 指标
+GET    /api/v1/logs                # 日志查询
+GET    /api/v1/dashboard           # 仪表盘数据
+GET    /api/v1/config              # 获取配置
+PUT    /api/v1/config              # 更新配置
+GET    /api/v1/audit               # 审计日志
+
+# 数据质量
+GET    /api/v1/quality/{task_id}   # 数据质量报告
+```
+
+### 2.13 Web 安全加固
+
+```python
+# Flask 安全配置
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False   # 本地部署可为 False
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
+
+# CSRF 防护
+from flask_wtf.csrf import CSRFProtect
+csrf = CSRFProtect(app)
+
+# Rate Limiting
+from flask_limiter import Limiter
+limiter = Limiter(app, key_func=get_remote_address,
+                  default_limits=["200 per minute"])
+
+# API Token 认证（替代 Basic Auth）
+from flask_httpauth import TokenAuth
+token_auth = TokenAuth()
+```
+
+### 2.14 Worker 健康监控与自动恢复
+
+```python
+class WorkerSupervisor:
+    """工作线程健康监控与自动恢复"""
+
+    def __init__(self, worker_threads: list, check_interval=30):
+        self.workers = worker_threads
+        self.check_interval = check_interval
+        self._stop_event = threading.Event()
+
+    def start(self):
+        thread = threading.Thread(target=self._supervise_loop, daemon=True)
+        thread.start()
+
+    def _supervise_loop(self):
+        while not self._stop_event.is_set():
+            for i, worker in enumerate(self.workers):
+                if not worker.is_alive():
+                    logger.warning(f"Worker-{i} 已死亡，正在重启...")
+                    self._restart_worker(i)
+            self._stop_event.wait(self.check_interval)
+
+    def _restart_worker(self, index):
+        old_worker = self.workers[index]
+        new_worker = threading.Thread(
+            target=old_worker._target,
+            args=old_worker._args,
+            kwargs=old_worker._kwargs,
+            daemon=True,
+            name=f"Worker-{index}"
+        )
+        self.workers[index] = new_worker
+        new_worker.start()
+```
+
+---
+
+## 第三部分：项目目录结构
+
+```
+etl-service/
+├── src/
+│   ├── __init__.py
+│   ├── main.py                      # 程序入口（CLI / 服务模式）
+│   ├── service.py                   # Windows 服务封装
+│   │
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py                # ConfigManager + ConfigValidator
+│   │   ├── task_manager.py          # 多任务管理器
+│   │   ├── pipeline.py              # ETL Pipeline 编排
+│   │   ├── pipeline_context.py      # Pipeline 上下文
+│   │   └── exceptions.py            # 异常分类体系
+│   │
+│   ├── watcher/
+│   │   ├── __init__.py
+│   │   ├── event_handler.py         # watchdog 事件处理 + 防抖
+│   │   ├── polling_scanner.py       # 定时轮询兜底
+│   │   └── file_stability.py        # 文件稳定性检查
+│   │
+│   ├── etl/
+│   │   ├── __init__.py
+│   │   ├── extractor.py             # 文件解析（CSV/JSON/Excel）
+│   │   ├── extractor_streaming.py   # 大文件流式解析
+│   │   ├── transformer.py           # 动态清洗代码加载
+│   │   ├── table_router.py          # 按月分表路由
+│   │   ├── loader.py                # MySQL 批量加载器
+│   │   └── encryption.py            # 字段加密模块
+│   │
+│   ├── infrastructure/
+│   │   ├── __init__.py
+│   │   ├── database.py              # 数据库连接池 + 读写分离
+│   │   ├── cache.py                 # 缓存管理（本地 + Redis）
+│   │   ├── state_tracker.py         # 文件处理状态追踪
+│   │   ├── distributed_lock.py      # 分布式锁
+│   │   ├── ha_elector.py            # Leader 选举
+│   │   ├── queue.py                 # 任务队列
+│   │   ├── worker_pool.py           # 工作线程池 + 健康监控
+│   │   └── file_archiver.py         # 文件归档
+│   │
+│   ├── web/
+│   │   ├── __init__.py
+│   │   ├── app.py                   # Flask 应用工厂
+│   │   ├── auth.py                  # 认证模块
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── tasks.py             # 任务管理 API
+│   │   │   ├── files.py             # 文件状态 API
+│   │   │   ├── templates.py         # SQL 模板管理 API
+│   │   │   ├── cleaners.py          # 清洗代码管理 API
+│   │   │   ├── config.py            # 配置管理 API
+│   │   │   ├── logs.py              # 日志查询 API
+│   │   │   ├── quality.py           # 数据质量 API
+│   │   │   └── system.py            # 健康检查 / 指标 API
+│   │   ├── static/
+│   │   │   ├── css/
+│   │   │   └── js/
+│   │   └── templates/
+│   │       ├── base.html
+│   │       ├── dashboard.html
+│   │       ├── config.html
+│   │       ├── templates.html
+│   │       ├── cleaner.html
+│   │       ├── logs.html
+│   │       ├── files.html
+│   │       └── quality.html
+│   │
+│   ├── monitoring/
+│   │   ├── __init__.py
+│   │   ├── metrics.py               # Prometheus 指标
+│   │   ├── quality_reporter.py       # 数据质量报告
+│   │   └── alerting.py               # 告警通知（钉钉/企微/邮件）
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── logging_config.py         # 结构化日志配置
+│       ├── trace.py                  # Trace 上下文
+│       └── helpers.py                # 通用工具函数
+│
+├── custom_etl/                       # 用户自定义清洗代码（运行时可编辑）
+│   ├── __init__.py
+│   ├── order_cleaner.py
+│   └── user_cleaner.py
+│
+├── sql_templates/                    # 用户自定义建表模板
+│   ├── order_template.sql
+│   └── user_template.sql
+│
+├── config/
+│   ├── config.yaml                   # 主配置文件
+│   └── logging.yaml                  # 日志配置
+│
+├── scripts/
+│   ├── init_db.sql                   # 数据库初始化脚本
+│   ├── create_service.bat            # 注册 Windows 服务
+│   ├── remove_service.bat            # 卸载 Windows 服务
+│   └── generate_key.py               # 加密密钥生成工具
+│
+├── resources/
+│   ├── web.ico                       # Web 管理图标
+│   ├── service.ico                   # 服务图标
+│   └── tray.ico                      # 托盘图标
+│
+├── installer/
+│   ├── etl_service.spec              # PyInstaller 配置
+│   ├── setup.iss                     # Inno Setup 脚本
+│   └── launch_web.bat                # Web 快捷启动脚本
+│
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py                   # Pytest fixtures
+│   ├── unit/
+│   │   ├── test_extractor.py
+│   │   ├── test_transformer.py
+│   │   ├── test_table_router.py
+│   │   ├── test_loader.py
+│   │   ├── test_encryption.py
+│   │   ├── test_config.py
+│   │   ├── test_pipeline.py
+│   │   └── test_state_tracker.py
+│   ├── integration/
+│   │   ├── test_etl_flow.py
+│   │   ├── test_ha_election.py
+│   │   └── test_web_api.py
+│   └── fixtures/
+│       ├── sample.csv
+│       ├── sample.json
+│       └── sample.xlsx
+│
+├── migrations/                       # Alembic 数据库迁移
+│   ├── env.py
+│   └── versions/
+│
+├── logs/                             # 运行时日志目录
+├── dead_letters/                     # 死信文件目录
+├── archive/                          # 归档文件目录
+│
+├── requirements.txt                  # Python 依赖
+├── requirements-dev.txt              # 开发/测试依赖
+├── pyproject.toml                    # 项目元数据
+├── Dockerfile                        # Docker 构建文件（开发/测试用）
+├── docker-compose.yml                # 本地开发环境（MySQL + Redis）
+├── Makefile                          # 常用命令快捷方式
+├── .flake8                           # Lint 配置
+├── .editorconfig                     # 编辑器配置
+├── LICENSE
+└── README.md
+```
+
+---
+
+## 第四部分：技术选型与依赖清单
+
+### 4.1 核心依赖
+
+```
+# requirements.txt
+
+# --- 核心框架 ---
+pyyaml>=6.0              # YAML 配置解析
+watchdog>=3.0            # 文件系统事件监控
+
+# --- 数据库 ---
+sqlalchemy>=2.0          # ORM + 连接池
+pymysql>=1.1             # MySQL 驱动
+alembic>=1.12            # 数据库迁移
+
+# --- 数据处理 ---
+openpyxl>=3.1            # Excel 读取
+chardet>=5.2             # 文件编码检测
+ijson>=3.2               # 大 JSON 流式解析
+
+# --- 缓存 ---
+redis>=5.0               # Redis 客户端
+cachetools>=5.3          # 本地 TTL 缓存
+
+# --- 安全/加密 ---
+cryptography>=41.0       # Fernet / AES-GCM 加密
+
+# --- Web ---
+flask>=3.0               # Web 框架
+flask-wtf>=1.2           # CSRF 防护
+flask-limiter>=3.5       # API 限流
+flask-httpauth>=4.8      # HTTP 认证
+flask-socketio>=5.3      # WebSocket（实时日志）
+
+# --- 盻控 ---
+prometheus-client>=0.19  # Prometheus 指标
+psutil>=5.9              # 系统资源监控
+
+# --- 日志 ---
+python-json-logger>=2.0  # JSON 结构化日志
+
+# --- Windows 服务 ---
+pywin32>=306             # Windows 服务 API
+```
+
+### 4.2 开发依赖
+
+```
+# requirements-dev.txt
+
+pytest>=7.4              # 测试框架
+pytest-cov>=4.1          # 覆盖率
+pytest-mock>=3.11        # Mock
+pytest-flask>=1.3        # Flask 测试
+factory-boy>=3.3         # 测试数据工厂
+faker>=20.0              # 随机数据生成
+flake8>=6.1              # Lint
+black>=23.0              # 代码格式化
+mypy>=1.6                # 类型检查
+```
+
+### 4.3 打包工具
+
+```
+pyinstaller>=6.0         # 打包为 exe
+pystray>=0.19            # 系统托盘（可选）
+```
+
+---
+
+## 第五部分：数据库完整设计
+
+### 5.1 初始化脚本 (`scripts/init_db.sql`)
+
+```sql
+-- ============================================
+-- ETL 服务数据库初始化脚本
+-- ============================================
+
+CREATE DATABASE IF NOT EXISTS etl_db
+    DEFAULT CHARSET utf8mb4
+    DEFAULT COLLATE utf8mb4_unicode_ci;
+
+USE etl_db;
+
+-- 1. 文件处理状态表
+CREATE TABLE IF NOT EXISTS processed_files (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_size BIGINT,
+    file_modified BIGINT NOT NULL,
+    file_hash VARCHAR(64),                  -- MD5 哈希，防止重复内容
+    status ENUM('PENDING','PROCESSING','SUCCESS','FAILED','SKIPPED') DEFAULT 'PENDING',
+    retry_count INT DEFAULT 0,
+    error_message TEXT,
+    error_type VARCHAR(50),                 -- RetryableError / FatalError / SkipFileError
+    row_count INT DEFAULT 0,
+    valid_row_count INT DEFAULT 0,
+    processing_time_ms INT,
+    instance_id VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP NULL,
+    UNIQUE KEY uk_task_file (task_id, file_path, file_modified),
+    INDEX idx_status (status),
+    INDEX idx_task_status (task_id, status),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2. Leader 选举表
+CREATE TABLE IF NOT EXISTS leader (
+    id INT PRIMARY KEY DEFAULT 1,
+    instance_id VARCHAR(100),
+    last_heartbeat TIMESTAMP NULL,
+    started_at TIMESTAMP NULL,
+    version INT DEFAULT 0                   -- 乐观锁版本号
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO leader (id) VALUES (1);
+
+-- 3. 数据质量日志表
+CREATE TABLE IF NOT EXISTS data_quality_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    file_path VARCHAR(500),
+    batch_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_rows INT DEFAULT 0,
+    valid_rows INT DEFAULT 0,
+    skipped_rows INT DEFAULT 0,
+    error_rows INT DEFAULT 0,
+    error_details JSON,
+    quality_score DECIMAL(5,2),
+    processing_time_ms INT,
+    INDEX idx_task_time (task_id, batch_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 4. 审计日志表
+CREATE TABLE IF NOT EXISTS audit_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_ip VARCHAR(45),
+    user_agent VARCHAR(500),
+    action VARCHAR(100) NOT NULL,
+    target VARCHAR(200),
+    detail JSON,
+    instance_id VARCHAR(100),
+    INDEX idx_time (timestamp),
+    INDEX idx_action (action)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 5. 配置变更历史表
+CREATE TABLE IF NOT EXISTS config_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    config_type ENUM('main','template','cleaner') NOT NULL,
+    config_key VARCHAR(200) NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    changed_by VARCHAR(100),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_type_key (config_type, config_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 6. 汇总统计表（加速查询）
+CREATE TABLE IF NOT EXISTS daily_statistics (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(100) NOT NULL,
+    stat_date DATE NOT NULL,
+    table_name VARCHAR(100),
+    total_files INT DEFAULT 0,
+    success_files INT DEFAULT 0,
+    failed_files INT DEFAULT 0,
+    total_rows INT DEFAULT 0,
+    valid_rows INT DEFAULT 0,
+    avg_quality_score DECIMAL(5,2),
+    avg_processing_time_ms INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_task_date (task_id, stat_date, table_name),
+    INDEX idx_date (stat_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 7. 服务心跳历史表（可选，用于监控页面展示）
+CREATE TABLE IF NOT EXISTS heartbeat_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    instance_id VARCHAR(100) NOT NULL,
+    heartbeat_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('ACTIVE','STANDBY','STARTING','STOPPING'),
+    queue_size INT DEFAULT 0,
+    active_workers INT DEFAULT 0,
+    memory_usage_mb DECIMAL(10,2),
+    cpu_percent DECIMAL(5,2),
+    INDEX idx_instance_time (instance_id, heartbeat_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### 5.2 数据库设计 ER 图
+
+```mermaid
+erDiagram
+    processed_files {
+        BIGINT id PK
+        VARCHAR task_id
+        VARCHAR file_path
+        ENUM status
+        INT retry_count
+        VARCHAR error_type
+        VARCHAR instance_id
+    }
+
+    leader {
+        INT id PK
+        VARCHAR instance_id
+        TIMESTAMP last_heartbeat
+        INT version
+    }
+
+    data_quality_log {
+        BIGINT id PK
+        VARCHAR task_id
+        INT total_rows
+        INT error_rows
+        DECIMAL quality_score
+    }
+
+    audit_log {
+        BIGINT id PK
+        VARCHAR action
+        VARCHAR target
+        JSON detail
+    }
+
+    config_history {
+        BIGINT id PK
+        ENUM config_type
+        VARCHAR config_key
+    }
+
+    daily_statistics {
+        BIGINT id PK
+        VARCHAR task_id
+        DATE stat_date
+        INT total_files
+    }
+
+    heartbeat_history {
+        BIGINT id PK
+        VARCHAR instance_id
+        ENUM status
+    }
+
+    processed_files ||--o{ data_quality_log : produces
+    daily_statistics }o--|| processed_files : aggregated_from
+```
+
+---
+
+## 第六部分：开发阶段规划
+
+### 6.1 阶段总览
+
+| 阶段 | 名称 | 工期 | 核心交付 |
+|------|------|------|----------|
+| 一 | 核心引擎 | ~18天 | 端到端单文件 ETL 跑通 |
+| 二 | 基础设施 | ~16天 | 多任务/缓存/加密/日志增强 |
+| 三 | Web管理界面 | ~14天 | 完整可视化管理界面 |
+| 四 | 高可用与监控 | ~8天 | 主备切换/Prometheus/告警 |
+| 五 | 打包部署 | ~10天 | 安装包/Windows服务/快捷方式 |
+
+### 6.2 甘特图
+
+```mermaid
+gantt
+    title ETL 服务开发路线图
+    dateFormat YYYY-MM-DD
+    axisFormat %m/%d
+
+    section 第一阶段：核心引擎
+    项目搭建与目录结构           :a1, 2026-05-20, 1d
+    配置管理模块                :a2, after a1, 2d
+    文件监控与防抖              :a3, after a2, 2d
+    文件解析器(Extractor)       :a4, after a3, 2d
+    清洗代码加载(Transformer)   :a5, after a4, 2d
+    按月分表路由(TableRouter)   :a6, after a5, 2d
+    MySQL加载器(Loader)         :a7, after a6, 2d
+    ETL Pipeline编排            :a8, after a7, 2d
+    单元测试                    :a9, after a8, 3d
+
+    section 第二阶段：基础设施
+    状态追踪与分布式锁          :b1, after a9, 2d
+    工作线程池与健康监控        :b2, after b1, 2d
+    加密模块                    :b3, after b2, 1d
+    缓存管理                    :b4, after b3, 2d
+    定时轮询兜底                :b5, after b4, 1d
+    文件归档                    :b6, after b5, 1d
+    数据质量报告                :b7, after b6, 2d
+    结构化日志与追踪            :b8, after b7, 1d
+    集成测试                    :b9, after b8, 3d
+
+    section 第三阶段：Web管理
+    Flask应用工厂与API框架      :c1, after b9, 2d
+    认证与安全加固              :c2, after c1, 1d
+    仪表盘页面                  :c3, after c2, 2d
+    配置管理页面                :c4, after c3, 1d
+    SQL模板管理                 :c5, after c4, 1d
+    清洗代码编辑器              :c6, after c5, 1d
+    实时日志页面                :c7, after c6, 2d
+    文件列表与重试              :c8, after c7, 1d
+    数据质量页面                :c9, after c8, 1d
+    API测试                     :c10, after c9, 2d
+
+    section 第四阶段：高可用与监控
+    Leader选举                  :d1, after c10, 2d
+    故障转移与恢复              :d2, after d1, 2d
+    Prometheus指标              :d3, after d2, 1d
+    告警通知                    :d4, after d3, 1d
+    HA集成测试                  :d5, after d4, 2d
+
+    section 第五阶段：打包部署
+    Windows服务封装             :e1, after d5, 1d
+    PyInstaller打包             :e2, after e1, 2d
+    Inno Setup安装包            :e3, after e2, 2d
+    快捷方式与托盘              :e4, after e3, 1d
+    端到端测试                  :e5, after e4, 2d
+    文档与交付                  :e6, after e5, 2d
+```
+
+### 6.3 第一阶段详细任务：核心引擎
+
+**目标**：实现端到端的单文件 ETL 流程 — 监控文件夹 → 读取文件 → 清洗 → 分表写入数据库。
+
+| 任务 | 产出 | 验收标准 |
+|------|------|----------|
+| 项目搭建 | 目录结构 + `pyproject.toml` + `requirements.txt` | `pip install -e .` 成功 |
+| 配置管理 | `ConfigManager` + `ConfigValidator` | 能正确加载 YAML 配置并校验 |
+| 文件监控 | `DebouncedHandler` + `FileStabilityChecker` | 放入文件后 3 秒内入队 |
+| 文件解析 | `Extractor` (CSV/JSON/XLSX) | 三种格式均正确解析为字典列表 |
+| 清洗代码 | `Transformer` + 动态加载 | 修改 .py 文件后 10 秒内生效 |
+| 分表路由 | `TableRouter` + SQL 模板 | 自动创建 `order_data_202601` 格式表 |
+| 数据加载 | `Loader` + 事务 | 批量插入成功，失败回滚 |
+| Pipeline | `ETLPipeline` 编排 | 完整流程跑通，有结构化日志 |
+
+### 6.4 第二阶段详细任务：基础设施
+
+| 任务 | 产出 | 验收标准 |
+|------|------|----------|
+| 状态追踪 | `StateTracker` + MySQL 存储 | 文件重启后不重复处理 |
+| 分布式锁 | `DistributedLock` (MySQL GET_LOCK) | 多实例不重复处理同一文件 |
+| 工作线程池 | `WorkerPool` + `WorkerSupervisor` | 线程异常死亡后自动重启 |
+| 加密 | `Encryption` (Fernet/AES-GCM) | 加密后可正确解密 |
+| 缓存 | `CacheManager` (Redis + Local) | 缓存命中率 > 80% |
+| 轮询兜底 | `PollingScanner` | 事件遗漏的文件在轮询周期内被发现 |
+| 文件归档 | `FileArchiver` (move/delete/keep) | 三种模式均正常工作 |
+| 质量报告 | `DataQualityReporter` | 每批次产出质量评分 |
+| 日志追踪 | `StructuredFormatter` + `TraceContext` | 全链路 trace_id 可追踪 |
+
+### 6.5 第三阶段详细任务：Web管理界面
+
+| 任务 | 产出 | 验收标准 |
+|------|------|----------|
+| Flask 工厂 | `app.py` + Blueprint 分组 | `/api/v1/health` 返回 200 |
+| 认证安全 | Token Auth + CSRF + Rate Limit | 未认证请求返回 401 |
+| 仪表盘 | 实时统计 + 图表 | 显示队列/处理量/成功率 |
+| 配置管理 | YAML 编辑 + 热加载 | 保存后配置立即生效 |
+| 模板管理 | SQL 模板 CRUD | 在线编辑/测试 SQL |
+| 代码编辑 | Ace Editor + 语法高亮 | 编辑清洗代码并测试 |
+| 实时日志 | WebSocket 日志流 | 日志实时推送无延迟 |
+| 文件列表 | 分页 + 筛选 + 重试 | 支持按状态/时间筛选 |
+| 质量页面 | 趋势图 + 错误明细 | 可查看质量变化趋势 |
+| 审计日志 | 操作记录查询 | 所有管理操作有迹可循 |
+
+### 6.6 第四阶段详细任务：高可用与监控
+
+| 任务 | 产出 | 验收标准 |
+|------|------|----------|
+| Leader 选举 | `HAElector` (MySQL 心跳) | Standby 在心跳超时后 15 秒内接管 |
+| 故障转移 | 自动启动/停止组件 | 新 Active 完成全量扫描补漏 |
+| Prometheus | `/metrics` 指标暴露 | Grafana 可正常采集展示 |
+| 告警 | 钉钉/企微/邮件通知 | 失败超阈值后 1 分钟内告警 |
+| HA 测试 | 模拟故障场景 | 拔网线/杀进程均能自动恢复 |
+
+### 6.7 第五阶段详细任务：打包部署
+
+| 任务 | 产出 | 验收标准 |
+|------|------|----------|
+| Windows 服务 | `service.py` (pywin32) | `sc start/stop` 正常工作 |
+| PyInstaller | `etl_engine.exe` | 双击可运行完整功能 |
+| Inno Setup | `ETL_Service_Setup.exe` | 安装向导引导配置 MySQL 等 |
+| 快捷方式 | 桌面图标 + 托盘 | 点击图标打开 Web 管理 |
+| 端到端测试 | 全流程验证 | 安装 → 配置 → 运行 → 卸载 |
+| 文档 | README + 运维手册 | 新人可独立完成部署 |
+
+---
+
+## 第七部分：测试策略
+
+### 7.1 测试分层
+
+```mermaid
+graph TB
+    E2E[端到端测试 10~15个]
+    INT[集成测试 30~40个]
+    UNIT[单元测试 100+个]
+
+    E2E --> INT --> UNIT
+
+    style E2E fill:#ff6b6b,color:#fff
+    style INT fill:#ffd93d,color:#333
+    style UNIT fill:#6bcb77,color:#fff
+```
+
+### 7.2 单元测试重点
+
+| 模块 | 测试重点 | Mock 对象 |
+|------|---------|----------|
+| `Extractor` | CSV/JSON/XLSX 解析、编码检测、空文件处理 | 文件系统 |
+| `Transformer` | 动态加载、热更新、异常清洗函数处理 | importlib |
+| `TableRouter` | 月表名生成、模板替换、建表 SQL 执行 | 数据库连接 |
+| `Loader` | 批量插入、事务回滚、连接池复用 | 数据库连接 |
+| `Encryption` | 加密/解密一致性、密钥无效处理 | 无需 Mock |
+| `ConfigManager` | YAML 解析、环境变量替换、校验规则 | 文件系统 |
+| `StateTracker` | 状态查询/更新、分布式锁竞争 | 数据库连接 |
+| `HAElector` | 选举竞争、心跳超时、故障转移 | 数据库连接 |
+
+### 7.3 集成测试场景
+
+| 场景 | 描述 | 预期结果 |
+|------|------|----------|
+| 端到端 ETL | 放入 CSV → 解析 → 清洗 → 写入月表 | 数据正确入库 |
+| 异常重试 | 模拟数据库连接断开 | 重试 3 次后进入死信 |
+| 大文件处理 | 放入 500MB CSV | 流式处理，内存不超 512MB |
+| 多任务并行 | 两个任务同时放入文件 | 各自独立处理，不交叉 |
+| 配置热加载 | 运行中修改 YAML | 新配置生效，旧任务完成 |
+| 清洗代码热更新 | 运行中修改 .py | 新文件使用新逻辑 |
+| 死信恢复 | 手动重试死信文件 | 重新处理成功 |
+
+### 7.4 测试覆盖率目标
+
+| 层级 | 目标覆盖率 |
+|------|-----------|
+| 核心引擎 (core/, etl/) | >= 90% |
+| 基础设施 (infrastructure/) | >= 80% |
+| Web API (web/api/) | >= 80% |
+| 整体 | >= 80% |
+
+---
+
+## 第八部分：性能目标与基准
+
+### 8.1 吞吐量目标
+
+| 指标 | 目标值 | 测试条件 |
+|------|--------|----------|
+| 小文件吞吐 | >= 100 文件/分钟 | 单文件 < 1000 行，4 线程 |
+| 大文件吞吐 | >= 50,000 行/分钟 | 单文件 > 100,000 行，流式处理 |
+| 事件响应延迟 | <= 3 秒 | 文件稳定后到入队 |
+| 端到端延迟 | <= 10 秒 | 文件创建到数据入库 |
+| Web API 响应 | <= 200ms | P99，不含数据库聚合查询 |
+
+### 8.2 资源限制
+
+| 资源 | 限制 |
+|------|------|
+| 内存占用 | <= 512MB（不含数据库/Redis） |
+| CPU 空闲 | <= 5%（无文件处理时） |
+| CPU 峰值 | <= 80%（全速处理时） |
+| 数据库连接池 | 写 5 + 读 20 |
+| 日志文件大小 | 单文件 <= 10MB，保留 5 个 |
+
+---
+
+## 第九部分：编码规范与 Git 策略
+
+### 9.1 代码风格
+
+- **格式化**：Black (line-length=120)
+- **Lint**：flake8 + mypy
+- **类型注解**：所有公共函数必须添加类型注解
+- **Docstring**：Google 风格，所有类和公共函数必须有
+- **编码**：UTF-8，无 BOM
+- **缩进**：4 空格
+
+### 9.2 Git 分支策略
+
+```mermaid
+gitGraph
+    commit id: "init"
+    branch develop
+    checkout develop
+    commit id: "project setup"
+    branch feature/core-engine
+    checkout feature/core-engine
+    commit id: "config manager"
+    commit id: "file watcher"
+    checkout develop
+    merge feature/core-engine
+    branch feature/infrastructure
+    checkout feature/infrastructure
+    commit id: "state tracker"
+    checkout develop
+    merge feature/infrastructure
+    branch release/v1.0
+    checkout main
+    merge release/v1.0
+    commit id: "v1.0.0" tag: "v1.0.0"
+```
+
+| 分支 | 用途 |
+|------|------|
+| `main` | 生产发布，仅通过 merge request 合入 |
+| `develop` | 开发主线，日常合并目标 |
+| `feature/*` | 功能分支 |
+| `bugfix/*` | 缺陷修复 |
+| `release/*` | 发版准备 |
+| `hotfix/*` | 生产紧急修复 |
+
+### 9.3 提交信息规范
+
+```
+<type>(<scope>): <subject>
+```
+
+| type | 说明 |
+|------|------|
+| `feat` | 新功能 |
+| `fix` | 修复缺陷 |
+| `refactor` | 重构 |
+| `test` | 测试相关 |
+| `docs` | 文档 |
+| `chore` | 构建/工具 |
+| `perf` | 性能优化 |
+
+---
+
+## 第十部分：CI/CD 流水线
+
+### 10.1 流水线设计
+
+```mermaid
+graph LR
+    PUSH[Push / PR] --> LINT[Lint + 类型检查]
+    LINT --> TEST[单元测试 + 覆盖率]
+    TEST --> BUILD[构建 exe]
+    BUILD --> PACK[Inno Setup 打包]
+    PACK --> RELEASE[发布 Release]
+    TAG[Tag v*] --> LINT
+```
+
+### 10.2 GitHub Actions 配置要点
+
+```yaml
+name: CI/CD Pipeline
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [develop]
+  tags: ['v*']
+
+jobs:
+  lint:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install flake8 black mypy
+      - run: flake8 src/ tests/
+      - run: black --check src/ tests/
+      - run: mypy src/
+
+  test:
+    runs-on: windows-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: etl_test
+      redis:
+        image: redis:7
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest tests/ --cov=src --cov-report=xml --cov-fail-under=80
+
+  build:
+    needs: [lint, test]
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - run: pyinstaller installer/etl_service.spec
+      - run: iscc installer/setup.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ETL_Service_Setup
+          path: installer/Output/ETL_Service_Setup.exe
+
+  release:
+    needs: build
+    steps:
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: installer/Output/ETL_Service_Setup.exe
+```
+
+---
+
+## 第十一部分：Docker 开发环境
+
+### 11.1 docker-compose.yml
+
+```yaml
+version: '3.8'
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: etl_db
+      MYSQL_USER: etl_user
+      MYSQL_PASSWORD: etl_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+
+volumes:
+  mysql_data:
+```
+
+### 11.2 Makefile 快捷命令
+
+```makefile
+dev-env:       ## 启动开发环境（MySQL + Redis）
+	docker-compose up -d
+
+dev-stop:      ## 停止开发环境
+	docker-compose down
+
+dev-reset:     ## 重置数据库
+	docker-compose down -v && docker-compose up -d
+
+install:       ## 安装依赖
+	pip install -r requirements.txt -r requirements-dev.txt
+
+test:          ## 运行测试
+	pytest tests/ -v --cov=src
+
+lint:          ## 代码检查
+	flake8 src/ tests/ && black --check src/ tests/ && mypy src/
+
+run:           ## 本地运行（非服务模式）
+	python src/main.py --config config/config.yaml
+
+build:         ## 打包为 exe
+	pyinstaller installer/etl_service.spec
+
+package:       ## 制作安装包
+	iscc installer/setup.iss
+```
+
+---
+
+## 第十二部分：风险与应对
+
+| # | 风险 | 概率 | 影响 | 应对措施 |
+|---|------|------|------|----------|
+| 1 | watchdog 在网络盘/某些文件系统上不触发事件 | 中 | 高 | 定时轮询兜底已设计，PollingScanner 可覆盖 |
+| 2 | 清洗代码热更新引入 bug 导致数据处理失败 | 高 | 高 | 清洗代码有语法检查入口，失败不替换旧版本 |
+| 3 | MySQL 连接池耗尽 | 中 | 高 | 连接池监控 + Prometheus 告警 + 慢查询日志 |
+| 4 | 大文件内存溢出 | 低 | 高 | 流式处理 + 100MB 阈值自动切换 + 内存监控 |
+| 5 | Leader 选举脑裂 | 低 | 极高 | MySQL 单点写 + 乐观锁版本号 + 心跳超时双重检查 |
+| 6 | PyInstaller 打包后运行异常 | 中 | 中 | 打包前完整测试 + CI 自动构建验证 |
+| 7 | Windows 服务权限不足 | 中 | 中 | 安装包以管理员运行 + 配置文件权限检查 |
+| 8 | 加密密钥泄露 | 低 | 极高 | 密钥仅存环境变量 + 不记日志 + 审计追踪 |
+
+---
+
+## 第十三部分：总结与下一步
+
+### 完善内容回顾
+
+本计划在原始设计文档基础上，补充了以下 **8 大类共 22 项** 内容：
+
+| 类别 | 补充项 |
+|------|--------|
+| 架构增强 | 多任务支持、ETL Pipeline 编排、分布式锁、Worker 健康监控 |
+| 数据保障 | 异常分类体系、数据质量报告、审计日志、文件归档策略 |
+| 性能优化 | 大文件流式处理、配置校验、结构化日志与 trace_id |
+| 安全加固 | Token 认证、CSRF 防护、Rate Limiting |
+| 开发规范 | 目录结构、依赖清单、编码风格、Git 分支策略 |
+| 质量保障 | 测试分层、覆盖率目标、Mock 策略 |
+| 工程化 | CI/CD 流水线、Docker 开发环境、Makefile 命令 |
+| 项目管理 | 5 阶段开发路线图、性能基准、风险评估 |
+
+### 下一步建议
+
+1. **确认技术选型** — 审核依赖清单，确认 Python 版本（建议 3.10+）和 MySQL 版本（建议 8.0+）
+2. **搭建开发环境** — 初始化项目目录，配置 docker-compose 本地环境
+3. **启动第一阶段** — 从配置管理模块开始，逐步推进核心引擎开发
+4. **建立 CI 流水线** — 尽早配置 GitHub Actions，确保代码质量门禁
+
+> 准备好后，可以为任意模块生成完整的 Python 实现代码。
+Read
+
+response.md

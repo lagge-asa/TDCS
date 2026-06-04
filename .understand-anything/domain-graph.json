@@ -1,0 +1,1247 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "etl-service",
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "Flask",
+      "watchdog",
+      "SQLAlchemy",
+      "Prometheus"
+    ],
+    "description": "实验室侧定时数据采集服务（TDCS），监听指定目录文件变化，自动完成Extract→Transform→Load全流程，写入MySQL月分区表，提供高可用、监控告警和Web管控接口。",
+    "analyzedAt": "2026-06-03T02:51:29.331Z",
+    "gitCommitHash": ""
+  },
+  "nodes": [
+    {
+      "id": "domain:file-collection",
+      "type": "domain",
+      "name": "文件采集域",
+      "summary": "负责监听实验室目录的文件变化事件，通过watchdog事件驱动与轮询兜底双机制检测新文件，并将待处理任务提交至工作线程池。",
+      "tags": [
+        "文件监听",
+        "事件驱动",
+        "轮询",
+        "任务提交"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entities": [
+          "FileEvent",
+          "PollingScan",
+          "Task"
+        ],
+        "businessRules": [
+          "watchdog防抖：连续3次mtime/size不变才处理",
+          "轮询兜底：只扫描mtime>last_scan的文件",
+          "每月1日触发月表生命周期操作"
+        ],
+        "crossDomainInteractions": [
+          "向ETL处理域提交文件处理任务",
+          "依赖基础设施域的线程池和状态机"
+        ]
+      }
+    },
+    {
+      "id": "domain:etl-processing",
+      "type": "domain",
+      "name": "ETL处理域",
+      "summary": "核心业务域，按批次执行Extract→Transform→Load全流程，支持CSV/JSON/Excel流式解析、沙箱隔离的用户清洗脚本、字段加密、月表路由和幂等写入MySQL。",
+      "tags": [
+        "ETL",
+        "数据提取",
+        "数据转换",
+        "数据加载",
+        "数据质量"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "ETLPipeline",
+          "Batch",
+          "DataRecord",
+          "QualityReport"
+        ],
+        "businessRules": [
+          "三类异常区分可重试/不可重试/跳过",
+          "Transform在独立子进程执行，屏蔽父进程环境变量",
+          "加密密钥只从环境变量读取",
+          "INSERT IGNORE保证幂等写入",
+          "质量分 = max(0, 100 - error_rate×60 - null_rate×40)"
+        ],
+        "crossDomainInteractions": [
+          "接收文件采集域提交的任务",
+          "依赖基础设施域的数据库连接和状态追踪",
+          "向监控告警域上报质量指标"
+        ]
+      }
+    },
+    {
+      "id": "domain:infrastructure",
+      "type": "domain",
+      "name": "基础设施域",
+      "summary": "提供数据库连接管理、优先级线程池、文件处理原子状态机、MySQL乐观锁HA选举、配置热加载和文件归档等底层能力，支撑上层业务稳定运行。",
+      "tags": [
+        "数据库",
+        "线程池",
+        "熔断器",
+        "状态机",
+        "高可用",
+        "配置管理"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "DatabaseManager",
+          "WorkerPool",
+          "StateTracker",
+          "HAElector",
+          "ConfigManager",
+          "FileArchiver"
+        ],
+        "businessRules": [
+          "per-task熔断器状态：CLOSED→OPEN→HALF_OPEN",
+          "状态机用INSERT...ON DUPLICATE KEY UPDATE消除竞态",
+          "HA选举基于MySQL乐观锁心跳，支持standalone/pause降级",
+          "配置热加载：校验通过才原子替换frozen dataclass"
+        ],
+        "crossDomainInteractions": [
+          "为ETL处理域提供数据库连接和状态追踪",
+          "为文件采集域提供线程池调度",
+          "为运维管控域提供配置管理接口"
+        ]
+      }
+    },
+    {
+      "id": "domain:monitoring-alerting",
+      "type": "domain",
+      "name": "监控告警域",
+      "summary": "采集Prometheus指标、计算数据质量评分，并通过钉钉/Webhook多通道告警，在质量分低或失败数超阈值时触发告警通知。",
+      "tags": [
+        "Prometheus",
+        "告警",
+        "数据质量",
+        "钉钉",
+        "Webhook"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entities": [
+          "Metrics",
+          "QualityReport",
+          "Alert"
+        ],
+        "businessRules": [
+          "按质量分/失败数触发告警",
+          "支持钉钉和通用Webhook两种告警通道"
+        ],
+        "crossDomainInteractions": [
+          "订阅ETL处理域的质量报告",
+          "向运维管控域暴露质量查询接口"
+        ]
+      }
+    },
+    {
+      "id": "domain:ops-control",
+      "type": "domain",
+      "name": "运维管控域",
+      "summary": "通过Flask REST API提供任务生命周期管控、配置动态修改、文件状态查询、质量报告查看和用户认证等管控能力，支持Web界面和API客户端操作。",
+      "tags": [
+        "REST API",
+        "Flask",
+        "认证",
+        "任务管理",
+        "配置管理"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entities": [
+          "Task",
+          "User",
+          "Config",
+          "QualityReport",
+          "FileState"
+        ],
+        "businessRules": [
+          "API访问需通过auth认证",
+          "配置变更实时热加载生效"
+        ],
+        "crossDomainInteractions": [
+          "调用文件采集域的TaskManager启停任务",
+          "调用基础设施域的ConfigManager修改配置",
+          "查询ETL处理域的StateTracker获取文件状态",
+          "查询监控告警域的QualityReporter获取质量报告"
+        ]
+      }
+    },
+    {
+      "id": "flow:watchdog-file-detection",
+      "type": "flow",
+      "name": "watchdog事件驱动文件检测",
+      "summary": "通过watchdog监听目录文件系统事件，防抖过滤后确认文件稳定，提交到工作线程池触发ETL处理。",
+      "tags": [
+        "watchdog",
+        "防抖",
+        "文件检测"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "文件系统CREATE/MODIFY事件",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "flow:polling-scan",
+      "type": "flow",
+      "name": "增量轮询兜底扫描",
+      "summary": "定时扫描监控目录，只处理mtime大于上次扫描时间的文件，作为watchdog的兜底机制防止事件丢失。",
+      "tags": [
+        "轮询",
+        "增量扫描",
+        "兜底"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "定时轮询触发",
+        "entryType": "cron"
+      }
+    },
+    {
+      "id": "flow:monthly-lifecycle",
+      "type": "flow",
+      "name": "月表生命周期管理",
+      "summary": "每月1日触发，执行月分区表的创建、归档旧表等生命周期操作，保证数据按月分区存储。",
+      "tags": [
+        "月分区",
+        "生命周期",
+        "定时任务"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "每月1日定时触发",
+        "entryType": "cron"
+      }
+    },
+    {
+      "id": "flow:etl-pipeline",
+      "type": "flow",
+      "name": "ETL主管道处理",
+      "summary": "核心数据处理流程，从文件流式提取数据，经沙箱转换和字段加密，路由到月分区表并幂等写入，最终生成数据质量报告。",
+      "tags": [
+        "ETL",
+        "流式处理",
+        "批次",
+        "数据质量"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "WorkerPool.submit() 任务回调",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "flow:data-quality-assessment",
+      "type": "flow",
+      "name": "数据质量评估",
+      "summary": "在ETL处理完成后，根据错误率和空值率计算质量分，触发告警并生成质量报告供Web API查询。",
+      "tags": [
+        "数据质量",
+        "质量评分",
+        "告警"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "ETLPipeline.execute() 完成回调",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "flow:ha-election",
+      "type": "flow",
+      "name": "HA主节点选举",
+      "summary": "多实例部署时通过MySQL乐观锁心跳进行Leader选举，非Leader节点进入pause模式停止任务处理，支持standalone单机降级。",
+      "tags": [
+        "高可用",
+        "选举",
+        "乐观锁",
+        "心跳"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "服务启动 / 心跳定时器",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "flow:service-bootstrap",
+      "type": "flow",
+      "name": "服务启动初始化",
+      "summary": "程序启动时按序初始化ConfigManager、DatabaseManager、WorkerPool、HAElector、TaskManager和Flask应用，完成服务就绪。",
+      "tags": [
+        "启动",
+        "初始化",
+        "依赖注入"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "main.py bootstrap()",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "flow:web-api-task-control",
+      "type": "flow",
+      "name": "Web API任务管控",
+      "summary": "通过REST API对任务执行启动、停止、手动触发等生命周期操作，并查询任务状态和文件处理记录。",
+      "tags": [
+        "REST API",
+        "任务管控",
+        "Flask"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "POST/GET /api/tasks/*",
+        "entryType": "http"
+      }
+    },
+    {
+      "id": "flow:config-hot-reload",
+      "type": "flow",
+      "name": "配置热加载",
+      "summary": "通过API或文件变化触发配置重新加载，校验新配置合法性后原子替换现有配置，无需重启服务。",
+      "tags": [
+        "配置管理",
+        "热加载",
+        "原子替换"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "PUT /api/config 或 文件变化事件",
+        "entryType": "http"
+      }
+    },
+    {
+      "id": "step:watchdog-file-detection:listen-fs-event",
+      "type": "step",
+      "name": "监听文件系统事件",
+      "summary": "watchdog EventHandler接收目录的CREATE/MODIFY事件，记录文件路径和初始mtime/size。",
+      "tags": [
+        "watchdog",
+        "事件监听"
+      ],
+      "complexity": "simple",
+      "filePath": "event_handler.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:watchdog-file-detection:debounce-check",
+      "type": "step",
+      "name": "防抖稳定性校验",
+      "summary": "连续轮询文件mtime和size，连续3次不变才认定文件写入完成，避免处理正在写入的文件。",
+      "tags": [
+        "防抖",
+        "稳定性"
+      ],
+      "complexity": "simple",
+      "filePath": "event_handler.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:watchdog-file-detection:claim-state",
+      "type": "step",
+      "name": "原子抢占文件状态",
+      "summary": "调用StateTracker.try_claim()通过INSERT...ON DUPLICATE KEY UPDATE原子标记文件为处理中，防止多实例重复处理。",
+      "tags": [
+        "状态机",
+        "竞态消除"
+      ],
+      "complexity": "moderate",
+      "filePath": "state_tracker.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:watchdog-file-detection:submit-task",
+      "type": "step",
+      "name": "提交任务到线程池",
+      "summary": "将文件处理任务按优先级提交到WorkerPool，由空闲worker线程异步执行ETL流程。",
+      "tags": [
+        "线程池",
+        "任务提交"
+      ],
+      "complexity": "simple",
+      "filePath": "worker_pool.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:polling-scan:scan-directory",
+      "type": "step",
+      "name": "扫描目录增量文件",
+      "summary": "PollingScanner遍历监控目录，筛选mtime大于last_scan时间戳的文件，生成待处理文件列表。",
+      "tags": [
+        "轮询",
+        "增量扫描"
+      ],
+      "complexity": "simple",
+      "filePath": "polling_scanner.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:polling-scan:update-scan-timestamp",
+      "type": "step",
+      "name": "更新扫描时间戳",
+      "summary": "扫描完成后更新last_scan时间戳，保证下次轮询只处理新增文件。",
+      "tags": [
+        "轮询",
+        "时间戳"
+      ],
+      "complexity": "simple",
+      "filePath": "polling_scanner.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:polling-scan:submit-missed-files",
+      "type": "step",
+      "name": "提交漏检文件任务",
+      "summary": "对未被watchdog捕获的文件执行状态抢占并提交到线程池，与watchdog形成双保险。",
+      "tags": [
+        "兜底",
+        "任务提交"
+      ],
+      "complexity": "simple",
+      "filePath": "polling_scanner.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:monthly-lifecycle:detect-month-boundary",
+      "type": "step",
+      "name": "检测月份边界",
+      "summary": "TaskManager在每次任务调度时检测当前日期是否为每月1日，触发月表生命周期操作。",
+      "tags": [
+        "月分区",
+        "定时检测"
+      ],
+      "complexity": "simple",
+      "filePath": "task_manager.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:monthly-lifecycle:create-new-month-table",
+      "type": "step",
+      "name": "创建新月分区表",
+      "summary": "monthly_lifecycle.py按当月创建新的{base_table}_YYYYMM分区表，表不存在则自动建表。",
+      "tags": [
+        "月分区",
+        "建表"
+      ],
+      "complexity": "simple",
+      "filePath": "monthly_lifecycle.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:monthly-lifecycle:archive-old-tables",
+      "type": "step",
+      "name": "归档旧月分区表",
+      "summary": "对超出保留周期的历史月表执行归档或清理，控制数据库存储增长。",
+      "tags": [
+        "归档",
+        "生命周期"
+      ],
+      "complexity": "simple",
+      "filePath": "monthly_lifecycle.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:etl-pipeline:stream-extract",
+      "type": "step",
+      "name": "流式提取文件数据",
+      "summary": "StreamingExtractor自动检测文件编码，按批次逐batch yield数据行，支持CSV/JSON/Excel格式，避免大文件内存溢出。",
+      "tags": [
+        "流式提取",
+        "CSV",
+        "JSON",
+        "Excel",
+        "编码检测"
+      ],
+      "complexity": "moderate",
+      "filePath": "extractor.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:etl-pipeline:sandbox-transform",
+      "type": "step",
+      "name": "沙箱隔离数据转换",
+      "summary": "TransformSandbox在独立子进程中执行用户自定义清洗脚本，屏蔽父进程环境变量，支持超时控制防止脚本挂起。",
+      "tags": [
+        "沙箱",
+        "子进程",
+        "用户脚本",
+        "超时"
+      ],
+      "complexity": "complex",
+      "filePath": "transform_sandbox.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:etl-pipeline:encrypt-fields",
+      "type": "step",
+      "name": "敏感字段加密",
+      "summary": "Encryption模块使用Fernet对称加密对指定字段加密，密钥严格从环境变量读取，保护实验数据隐私。",
+      "tags": [
+        "加密",
+        "Fernet",
+        "数据安全"
+      ],
+      "complexity": "simple",
+      "filePath": "encryption.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:etl-pipeline:route-to-monthly-table",
+      "type": "step",
+      "name": "月表路由分组",
+      "summary": "TableRouter按数据行中的分区字段值将批次数据分组，路由到对应的{base_table}_YYYYMM月分区表，表不存在时自动建表。",
+      "tags": [
+        "月表路由",
+        "分区",
+        "自动建表"
+      ],
+      "complexity": "moderate",
+      "filePath": "table_router.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:etl-pipeline:idempotent-load",
+      "type": "step",
+      "name": "幂等批量写入",
+      "summary": "Loader使用INSERT IGNORE语句批量写入MySQL月分区表，保证重复执行不产生重复数据，支持断点续传。",
+      "tags": [
+        "幂等写入",
+        "INSERT IGNORE",
+        "MySQL"
+      ],
+      "complexity": "simple",
+      "filePath": "loader.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:etl-pipeline:update-file-state",
+      "type": "step",
+      "name": "更新文件处理状态",
+      "summary": "ETL完成或失败后，StateTracker更新文件状态为completed/failed，记录处理结果供Web API查询和重试判断。",
+      "tags": [
+        "状态机",
+        "处理结果"
+      ],
+      "complexity": "simple",
+      "filePath": "state_tracker.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:data-quality-assessment:calculate-score",
+      "type": "step",
+      "name": "计算质量评分",
+      "summary": "QualityReporter根据批次处理结果计算 score = max(0, 100 - error_rate×60 - null_rate×40)，量化数据质量。",
+      "tags": [
+        "质量评分",
+        "计算"
+      ],
+      "complexity": "simple",
+      "filePath": "quality_reporter.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:data-quality-assessment:record-metrics",
+      "type": "step",
+      "name": "记录Prometheus指标",
+      "summary": "metrics.py将质量分、处理行数、错误数等指标写入Prometheus，供监控系统采集和可视化。",
+      "tags": [
+        "Prometheus",
+        "指标上报"
+      ],
+      "complexity": "simple",
+      "filePath": "metrics.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:data-quality-assessment:trigger-alert",
+      "type": "step",
+      "name": "触发多通道告警",
+      "summary": "alerting.py根据质量分和失败数判断是否触发告警，通过钉钉或Webhook发送告警通知给运维人员。",
+      "tags": [
+        "告警",
+        "钉钉",
+        "Webhook"
+      ],
+      "complexity": "simple",
+      "filePath": "alerting.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:ha-election:acquire-leader-lock",
+      "type": "step",
+      "name": "MySQL乐观锁竞选Leader",
+      "summary": "HAElector通过MySQL乐观锁UPDATE语句竞争Leader角色，成功者成为主节点开始处理任务。",
+      "tags": [
+        "HA",
+        "乐观锁",
+        "选举"
+      ],
+      "complexity": "moderate",
+      "filePath": "ha_elector.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:ha-election:heartbeat-renewal",
+      "type": "step",
+      "name": "心跳续约",
+      "summary": "Leader节点定时更新心跳时间戳，非Leader节点检测到Leader心跳超时后重新发起选举。",
+      "tags": [
+        "心跳",
+        "续约"
+      ],
+      "complexity": "simple",
+      "filePath": "ha_elector.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:ha-election:follower-pause",
+      "type": "step",
+      "name": "Follower暂停处理",
+      "summary": "非Leader实例进入pause模式，暂停TaskManager的文件监听和任务提交，等待Leader角色转移。",
+      "tags": [
+        "HA",
+        "pause",
+        "降级"
+      ],
+      "complexity": "simple",
+      "filePath": "ha_elector.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:service-bootstrap:load-config",
+      "type": "step",
+      "name": "加载初始配置",
+      "summary": "ConfigManager读取配置文件，校验配置合法性并生成frozen dataclass实例，作为全局不可变配置对象。",
+      "tags": [
+        "配置加载",
+        "校验"
+      ],
+      "complexity": "simple",
+      "filePath": "config.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:service-bootstrap:init-database",
+      "type": "step",
+      "name": "初始化数据库连接",
+      "summary": "DatabaseManager建立MySQL连接池，验证数据库连通性，创建状态追踪等基础表结构。",
+      "tags": [
+        "数据库",
+        "连接池",
+        "初始化"
+      ],
+      "complexity": "simple",
+      "filePath": "database.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:service-bootstrap:start-worker-pool",
+      "type": "step",
+      "name": "启动优先级线程池",
+      "summary": "WorkerPool初始化优先级队列和worker线程，启动Supervisor监控线程，为每个任务类型初始化熔断器。",
+      "tags": [
+        "线程池",
+        "熔断器",
+        "Supervisor"
+      ],
+      "complexity": "moderate",
+      "filePath": "worker_pool.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:service-bootstrap:start-ha-elector",
+      "type": "step",
+      "name": "启动HA选举器",
+      "summary": "HAElector启动心跳线程，参与Leader选举，根据结果决定是否激活TaskManager。",
+      "tags": [
+        "HA",
+        "启动"
+      ],
+      "complexity": "simple",
+      "filePath": "ha_elector.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:service-bootstrap:start-task-manager",
+      "type": "step",
+      "name": "启动任务管理器",
+      "summary": "TaskManager启动watchdog EventHandler和PollingScanner，开始监听目录文件变化，协调双轨文件检测机制。",
+      "tags": [
+        "任务管理",
+        "watchdog",
+        "轮询"
+      ],
+      "complexity": "moderate",
+      "filePath": "task_manager.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:service-bootstrap:start-flask-app",
+      "type": "step",
+      "name": "启动Flask Web服务",
+      "summary": "create_app()初始化Flask应用，注册认证中间件和各蓝图路由，启动HTTP服务器提供管控API。",
+      "tags": [
+        "Flask",
+        "API",
+        "启动"
+      ],
+      "complexity": "simple",
+      "filePath": "app.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:web-api-task-control:authenticate",
+      "type": "step",
+      "name": "API请求认证",
+      "summary": "auth.py验证请求的认证凭据，拦截未授权访问，保护管控接口安全。",
+      "tags": [
+        "认证",
+        "安全"
+      ],
+      "complexity": "simple",
+      "filePath": "auth.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:web-api-task-control:handle-task-lifecycle",
+      "type": "step",
+      "name": "任务生命周期操作",
+      "summary": "tasks.py处理任务启动、停止、手动触发等请求，调用TaskManager执行对应操作并返回状态。",
+      "tags": [
+        "任务管控",
+        "REST API"
+      ],
+      "complexity": "simple",
+      "filePath": "tasks.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:web-api-task-control:query-file-states",
+      "type": "step",
+      "name": "查询文件处理状态",
+      "summary": "files.py通过StateTracker查询各文件的处理状态记录，返回处理中、成功、失败等状态列表。",
+      "tags": [
+        "文件状态",
+        "查询"
+      ],
+      "complexity": "simple",
+      "filePath": "files.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:web-api-task-control:query-quality-report",
+      "type": "step",
+      "name": "查询质量报告",
+      "summary": "quality.py调用QualityReporter获取最新质量评分和历史趋势数据，以JSON格式返回给调用方。",
+      "tags": [
+        "质量报告",
+        "查询"
+      ],
+      "complexity": "simple",
+      "filePath": "quality.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:config-hot-reload:validate-new-config",
+      "type": "step",
+      "name": "校验新配置",
+      "summary": "ConfigManager解析并校验新配置内容，包括必填字段、类型检查和业务约束，校验失败则拒绝变更。",
+      "tags": [
+        "配置校验",
+        "热加载"
+      ],
+      "complexity": "simple",
+      "filePath": "config.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:config-hot-reload:atomic-replace-config",
+      "type": "step",
+      "name": "原子替换配置对象",
+      "summary": "校验通过后原子替换frozen dataclass配置实例，运行中的组件在下次读取配置时自动使用新配置。",
+      "tags": [
+        "原子替换",
+        "frozen dataclass"
+      ],
+      "complexity": "simple",
+      "filePath": "config.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "domain:file-collection",
+      "target": "flow:watchdog-file-detection",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:file-collection",
+      "target": "flow:polling-scan",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:file-collection",
+      "target": "flow:monthly-lifecycle",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:etl-processing",
+      "target": "flow:etl-pipeline",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:etl-processing",
+      "target": "flow:data-quality-assessment",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:infrastructure",
+      "target": "flow:ha-election",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:infrastructure",
+      "target": "flow:service-bootstrap",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:infrastructure",
+      "target": "flow:config-hot-reload",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:ops-control",
+      "target": "flow:web-api-task-control",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:watchdog-file-detection",
+      "target": "step:watchdog-file-detection:listen-fs-event",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:watchdog-file-detection",
+      "target": "step:watchdog-file-detection:debounce-check",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:watchdog-file-detection",
+      "target": "step:watchdog-file-detection:claim-state",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:watchdog-file-detection",
+      "target": "step:watchdog-file-detection:submit-task",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:polling-scan",
+      "target": "step:polling-scan:scan-directory",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:polling-scan",
+      "target": "step:polling-scan:update-scan-timestamp",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:polling-scan",
+      "target": "step:polling-scan:submit-missed-files",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:monthly-lifecycle",
+      "target": "step:monthly-lifecycle:detect-month-boundary",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:monthly-lifecycle",
+      "target": "step:monthly-lifecycle:create-new-month-table",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:monthly-lifecycle",
+      "target": "step:monthly-lifecycle:archive-old-tables",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:etl-pipeline",
+      "target": "step:etl-pipeline:stream-extract",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:etl-pipeline",
+      "target": "step:etl-pipeline:sandbox-transform",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:etl-pipeline",
+      "target": "step:etl-pipeline:encrypt-fields",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:etl-pipeline",
+      "target": "step:etl-pipeline:route-to-monthly-table",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:etl-pipeline",
+      "target": "step:etl-pipeline:idempotent-load",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "flow:etl-pipeline",
+      "target": "step:etl-pipeline:update-file-state",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:data-quality-assessment",
+      "target": "step:data-quality-assessment:calculate-score",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:data-quality-assessment",
+      "target": "step:data-quality-assessment:record-metrics",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:data-quality-assessment",
+      "target": "step:data-quality-assessment:trigger-alert",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:ha-election",
+      "target": "step:ha-election:acquire-leader-lock",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:ha-election",
+      "target": "step:ha-election:heartbeat-renewal",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:ha-election",
+      "target": "step:ha-election:follower-pause",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:service-bootstrap",
+      "target": "step:service-bootstrap:load-config",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:service-bootstrap",
+      "target": "step:service-bootstrap:init-database",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:service-bootstrap",
+      "target": "step:service-bootstrap:start-worker-pool",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:service-bootstrap",
+      "target": "step:service-bootstrap:start-ha-elector",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:service-bootstrap",
+      "target": "step:service-bootstrap:start-task-manager",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "flow:service-bootstrap",
+      "target": "step:service-bootstrap:start-flask-app",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:web-api-task-control",
+      "target": "step:web-api-task-control:authenticate",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:web-api-task-control",
+      "target": "step:web-api-task-control:handle-task-lifecycle",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:web-api-task-control",
+      "target": "step:web-api-task-control:query-file-states",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:web-api-task-control",
+      "target": "step:web-api-task-control:query-quality-report",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "flow:config-hot-reload",
+      "target": "step:config-hot-reload:validate-new-config",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:config-hot-reload",
+      "target": "step:config-hot-reload:atomic-replace-config",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "domain:file-collection",
+      "target": "domain:etl-processing",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "文件采集域检测到稳定文件后，通过线程池向ETL处理域提交处理任务",
+      "weight": 0.9
+    },
+    {
+      "source": "domain:etl-processing",
+      "target": "domain:monitoring-alerting",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "ETL处理完成后向监控告警域上报质量报告和处理指标",
+      "weight": 0.8
+    },
+    {
+      "source": "domain:infrastructure",
+      "target": "domain:file-collection",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "基础设施域提供线程池、状态机和HA选举能力，支撑文件采集域的高可用运行",
+      "weight": 0.8
+    },
+    {
+      "source": "domain:infrastructure",
+      "target": "domain:etl-processing",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "基础设施域提供数据库连接、状态追踪和熔断器，保障ETL处理域稳定执行",
+      "weight": 0.9
+    },
+    {
+      "source": "domain:ops-control",
+      "target": "domain:file-collection",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "运维管控域通过Web API控制文件采集域的任务启停和手动触发",
+      "weight": 0.7
+    },
+    {
+      "source": "domain:ops-control",
+      "target": "domain:monitoring-alerting",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "运维管控域通过Web API查询监控告警域的质量报告和告警记录",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:ops-control",
+      "target": "domain:infrastructure",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "运维管控域通过Web API触发基础设施域的配置热加载",
+      "weight": 0.6
+    }
+  ],
+  "layers": [],
+  "tour": []
+}

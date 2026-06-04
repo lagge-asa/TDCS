@@ -1,0 +1,104 @@
+service:
+  instance_id: "dev_instance_1"
+  log_level: "INFO"
+
+database:
+  master:
+    host: "127.0.0.1"
+    port: 3306
+    user: "etl_user"
+    password: "${DB_MASTER_PASSWORD}"
+    database: "etl_db"
+    pool_size: 5
+    pool_timeout: 30
+    pool_recycle: 3600
+    connect_timeout: 10
+    auth_plugin: "caching_sha2_password"
+  slaves: []
+
+cache:
+  local:
+    enabled: true
+    maxsize: 1000
+    ttl: 300
+  redis:
+    enabled: true
+    host: "127.0.0.1"
+    port: 6379
+    password: ""
+    db: 0
+
+concurrency:
+  worker_threads: 4
+  queue_maxsize: 500
+  task_timeout: 300
+
+encryption:
+  enabled: false
+  algorithm: "fernet"
+  key_env: "ETL_ENCRYPTION_KEY"
+
+high_availability:
+  enabled: false
+  heartbeat_interval: 10
+  failover_timeout: 30
+  degraded_mode: "pause"
+
+web:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8080
+  secret_key: "${WEB_SECRET_KEY}"
+  token_expire_hours: 8
+  rate_limit: "200 per minute"
+  server: "waitress"
+  threads: 4
+
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+  alerting:
+    enabled: false
+
+tasks:
+  - task_id: "sample_import"
+    name: "示例数据导入"
+    enabled: true
+    priority: 1
+    monitor:
+      folder_path: "D:\\data\\input"
+      file_extensions: [".csv"]
+      recursive: false
+      debounce_seconds: 3
+      stability_check_interval: 1
+      stability_check_count: 3
+    etl:
+      extractor: "csv"
+      encoding: "auto"
+      batch_size: 1000
+      transformer_module: ""
+      transformer_function: ""
+      sandbox_timeout: 30
+      sandbox_memory_mb: 256
+    table:
+      base_table: "cfd_data"
+      partition_field: ""
+      partition_field_format: ""
+      create_table_template: "sql_templates/cfd_data.sql"
+      retention_months: 0
+      archive_old_tables: false
+    error_handling:
+      max_retries: 3
+      retry_backoff: [5, 30, 120]
+      dead_letter_dir: "D:\\data\\dead_letters"
+      on_row_error: "skip"
+    archive:
+      mode: "keep"
+      archive_dir: "D:\\data\\archive"
+      retain_structure: true
+      compress_after_days: 7
+      cleanup_after_days: 90
+    schedule:
+      poll_interval: 60
+      poll_incremental: true

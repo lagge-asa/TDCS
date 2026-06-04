@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Secrets & config overrides
+*.env
+.env*
+config/local*.yaml
+config/prod*.yaml
+config/config.yaml
+
+# Logs & data
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Understand-anything intermediate
+.understand-anything/intermediate/
+.understand-anything/tmp/
+
+# Sessions & tool data
+sessions/
+skills/
+.claude-plugin/
+statuses/
+labels/
+views.json
+config.json
+新建 文本文档.txt
+
+# Large data files
+events.jsonl

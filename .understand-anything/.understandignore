@@ -1,0 +1,5 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+#
+# events.jsonl — large data file, uncomment to exclude
+# events.jsonl
