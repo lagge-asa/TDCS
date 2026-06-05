@@ -5,6 +5,10 @@ Worker 线程池 + per-task 熔断器 + Supervisor 自动重启
 - OPEN 时返回 REJECTED_CIRCUIT_OPEN, 不阻塞调用方
 - per-task: 一个任务 OPEN 不影响其他任务
 - HALF_OPEN 只允许一个试探请求
+
+优化:
+- WorkerTask dataclass 替代 tuple，扩展字段时向后兼容
+- _supervise 引入退避策略：5 分钟内重启超过 3 次则停止并告警
 """
 
 import queue
@@ -18,6 +22,10 @@ from typing import Dict
 from ..core.exceptions import SkipFileError
 
 logger = logging.getLogger(__name__)
+
+# Supervisor 退避参数
+_RESTART_WINDOW = 300   # 秒：滑动窗口
+_RESTART_MAX = 3        # 窗口内最大重启次数
 
 
 class CircuitState(Enum):
@@ -56,10 +64,10 @@ class CircuitBreaker:
                     self._half_open_in_progress = False
                     return True
                 return False
-            # HALF_OPEN: 只允许一个试探; 超过 recovery_timeout 后重置卡死的标志
+            # HALF_OPEN: 只允许一个试探; 超过 recovery_timeout 后重置卡死标志
             if self._half_open_in_progress:
                 if time.monotonic() - self._half_open_at > self.recovery_timeout:
-                    self._half_open_in_progress = False  # Worker 崩溃兜底重置
+                    self._half_open_in_progress = False
                 else:
                     return False
             self._half_open_in_progress = True
@@ -80,7 +88,8 @@ class CircuitBreaker:
                     or self._failures >= self.failure_threshold):
                 self._state = CircuitState.OPEN
                 self._opened_at = time.monotonic()
-                logger.error("Circuit OPEN for task (failures=%d)", self._failures)
+                logger.error("Circuit OPEN for task (failures=%d)",
+                             self._failures)
 
     @property
     def state(self) -> CircuitState:
@@ -88,15 +97,26 @@ class CircuitBreaker:
             return self._state
 
 
+@dataclass
+class WorkerTask:
+    """队列任务载体，替代 tuple，扩展字段时向后兼容."""
+    priority: int
+    task_id: str
+    file_path: str
+    file_mtime: int
+    file_size: int
+    file_hash: str
+
+    # PriorityQueue 按第一个字段排序，需支持 < 比较
+    def __lt__(self, other: "WorkerTask") -> bool:
+        return self.priority < other.priority
+
+
 class WorkerPool:
     """优先级队列 + per-task 熔断器 + Supervisor 自动重启."""
 
     def __init__(self, process_fn, num_workers: int,
                  queue_maxsize: int = 500):
-        """
-        process_fn(task_id, file_path, file_mtime, file_size, file_hash,
-                   breaker) -> None
-        """
         self._process_fn = process_fn
         self._queue: queue.PriorityQueue = queue.PriorityQueue(
             maxsize=queue_maxsize)
@@ -111,6 +131,10 @@ class WorkerPool:
             for i in range(num_workers)
         ]
         self._num_workers = num_workers
+        # Supervisor 退避：记录各 worker 的重启时间戳列表
+        self._restart_times: Dict[int, list] = {
+            i: [] for i in range(num_workers)}
+        self._disabled_workers: set = set()  # 因频繁重启而停用的 worker 索引
 
     def start(self) -> None:
         for w in self._workers:
@@ -132,8 +156,8 @@ class WorkerPool:
             return SubmitResult.REJECTED_CIRCUIT_OPEN
         try:
             self._queue.put_nowait(
-                (priority, task_id, file_path,
-                 file_mtime, file_size, file_hash))
+                WorkerTask(priority, task_id, file_path,
+                           file_mtime, file_size, file_hash))
             return SubmitResult.QUEUED
         except queue.Full:
             return SubmitResult.QUEUE_FULL
@@ -160,10 +184,8 @@ class WorkerPool:
     def breaker_states(self) -> dict:
         """返回各 task_id 的熔断器状态."""
         with self._breaker_lock:
-            return {
-                tid: cb.state.value
-                for tid, cb in self._breakers.items()
-            }
+            return {tid: cb.state.value
+                    for tid, cb in self._breakers.items()}
 
     def stop(self) -> None:
         self._stop.set()
@@ -175,17 +197,16 @@ class WorkerPool:
             return self._breakers[task_id]
 
     def _work(self) -> None:
-        item = None
         while not self._stop.is_set():
             try:
-                item = self._queue.get(timeout=1)
+                task: WorkerTask = self._queue.get(timeout=1)
             except queue.Empty:
                 continue
-            _, task_id, file_path, file_mtime, file_size, file_hash = item
-            breaker = self._get_breaker(task_id)
+            breaker = self._get_breaker(task.task_id)
             try:
-                self._process_fn(task_id, file_path, file_mtime,
-                                 file_size, file_hash, breaker)
+                self._process_fn(
+                    task.task_id, task.file_path, task.file_mtime,
+                    task.file_size, task.file_hash, breaker)
             except SkipFileError:
                 pass  # 预期跳过，不计入熔断
             except Exception as e:
@@ -193,14 +214,30 @@ class WorkerPool:
                 breaker.record_failure()
             finally:
                 self._queue.task_done()
-                item = None
 
     def _supervise(self) -> None:
-        """检测死亡 Worker 并重启."""
+        """检测死亡 Worker 并重启，带退避保护."""
         while not self._stop.is_set():
+            now = time.monotonic()
             for i, w in enumerate(self._workers):
+                if i in self._disabled_workers:
+                    continue
                 if not w.is_alive():
+                    # 清理窗口外的旧记录
+                    self._restart_times[i] = [
+                        t for t in self._restart_times[i]
+                        if now - t < _RESTART_WINDOW
+                    ]
+                    if len(self._restart_times[i]) >= _RESTART_MAX:
+                        logger.error(
+                            "Worker-%d restarted %d times in %ds, "
+                            "disabling to prevent crash loop. "
+                            "Manual intervention required.",
+                            i, _RESTART_MAX, _RESTART_WINDOW)
+                        self._disabled_workers.add(i)
+                        continue
                     logger.warning("Worker-%d died, restarting...", i)
+                    self._restart_times[i].append(now)
                     new_w = threading.Thread(
                         target=self._work,
                         daemon=True, name=f"Worker-{i}")
