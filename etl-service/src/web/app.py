@@ -3,7 +3,7 @@ Flask 应用工厂 + waitress 生产服务器
 """
 
 import logging
-from flask import Flask
+from flask import Flask, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -69,6 +69,16 @@ def create_app(config_manager, task_manager=None,
     app.register_blueprint(audit_bp, url_prefix="/api/v1/audit-logs")
     app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
     app.register_blueprint(monthly_bp, url_prefix="/api/v1/monthly")
+
+    # 全局错误处理器 — 保证所有未捕获异常返回 JSON 而非 HTML
+    @app.errorhandler(Exception)
+    def _handle_exception(e):
+        import traceback
+        from werkzeug.exceptions import HTTPException
+        if isinstance(e, HTTPException):
+            return jsonify({"error": e.description}), e.code
+        logger.error("Unhandled exception: %s", traceback.format_exc())
+        return jsonify({"error": "Internal server error"}), 500
 
     return app
 

@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -33,8 +34,41 @@ _MAX_UPLOAD_MB = 20
 
 # 内存中暂存下载任务 {token: (csv_bytes, filename, expire_ts)}
 _download_store: dict = {}
+_download_lock = threading.Lock()  # 保护 _download_store 多线程并发读写
 
 _CLEANER_RUNNER = Path(__file__).parent.parent.parent / "etl" / "_cleaner_runner.py"
+
+# 敏感环境变量前缀，子进程不继承
+_SENSITIVE_PREFIXES = (
+    "ETL_", "DB_", "MYSQL_", "REDIS_", "SECRET", "PASSWORD",
+    "TOKEN", "API_KEY", "AWS_", "ENCRYPTION",
+)
+
+
+def _build_subprocess_env() -> dict:
+    """构建子进程环境变量：保留 Windows 系统必要变量，过滤敏感凭证。"""
+    env = {}
+    for k, v in os.environ.items():
+        upper = k.upper()
+        if any(upper.startswith(p) for p in _SENSITIVE_PREFIXES):
+            continue
+        env[k] = v
+    # 确保 Python 子进程能正确编码
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
+def _start_purge_thread():
+    """启动后台定时清理线程（每 5 分钟清理过期下载令牌）。"""
+    def _loop():
+        while True:
+            time.sleep(300)
+            _purge_expired_downloads()
+    t = threading.Thread(target=_loop, daemon=True, name="CleanerTokenPurge")
+    t.start()
+
+
+_start_purge_thread()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -57,10 +91,7 @@ def _run_cleaner_subprocess(script_path: Path, file_bytes: bytes,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env={
-            "PYTHONPATH": str(script_path.parent),
-            "PYTHONIOENCODING": "utf-8",
-        },
+        env=_build_subprocess_env(),
         text=True,
         encoding="utf-8",
     )
@@ -89,11 +120,14 @@ def _run_cleaner_subprocess(script_path: Path, file_bytes: bytes,
 
 
 def _purge_expired_downloads():
-    """清理过期下载令牌。"""
+    """清理过期下载令牌（线程安全）。"""
     now = time.time()
-    expired = [k for k, v in _download_store.items() if v[2] < now]
-    for k in expired:
-        del _download_store[k]
+    with _download_lock:
+        expired = [k for k, v in _download_store.items() if v[2] < now]
+        for k in expired:
+            del _download_store[k]
+        if expired:
+            logger.debug("Purged %d expired download token(s)", len(expired))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -211,7 +245,8 @@ def run_cleaner():
         download_token = str(uuid.uuid4()).replace("-", "")
         expire_ts = time.time() + _DOWNLOAD_TTL
         clean_fname = f"cleaned_{template_name}_{int(time.time())}.csv"
-        _download_store[download_token] = (csv_bytes, clean_fname, expire_ts)
+        with _download_lock:
+            _download_store[download_token] = (csv_bytes, clean_fname, expire_ts)
 
     preview = rows[:50] if preview_only else rows
 
@@ -232,14 +267,13 @@ def run_cleaner():
 @require_auth("viewer")
 def download_result(token: str):
     """下载完整清洗结果 CSV。"""
-    entry = _download_store.get(token)
-    if not entry:
-        return jsonify({"error": "下载令牌不存在或已过期（30分钟有效）"}), 404
-
-    csv_bytes, filename, expire_ts = entry
-    if time.time() > expire_ts:
-        del _download_store[token]
-        return jsonify({"error": "下载令牌已过期"}), 410
+    with _download_lock:
+        entry = _download_store.get(token)
+        # 统一判断：不存在或已过期
+        if not entry or time.time() > entry[2]:
+            _download_store.pop(token, None)
+            return jsonify({"error": "下载令牌不存在或已过期（30分钟有效）"}), 404
+        csv_bytes, filename, _ = entry
 
     return Response(
         csv_bytes,

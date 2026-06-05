@@ -105,6 +105,9 @@ class TaskManager:
             shutil.move(file_path, dst)
             logger.warning("Moved to dead letter: %s -> %s",
                            file_path, dst)
+        except FileNotFoundError:
+            # 文件已不存在（可能已被其他进程移走），记录警告但不阻断后续通知流程
+            logger.warning("Dead letter source not found (already moved?): %s", file_path)
         except Exception as e:
             logger.error("Failed to move to dead letter: %s", e)
 

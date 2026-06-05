@@ -9,11 +9,16 @@ PUT    /api/v1/users/<id>/role     修改角色（admin）
 GET    /api/v1/users/me            查看当前用户信息（任意已登录）
 """
 
+import json
+import re
 import bcrypt
 from flask import Blueprint, jsonify, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+
+# 用户名只允许字母、数字、下划线、连字符，长度 3-32
+_USERNAME_RE = re.compile(r'^[a-zA-Z0-9_-]{3,32}$')
 
 bp = Blueprint("users", __name__)
 
@@ -37,7 +42,7 @@ def _audit(action: str, target: str, detail: dict = None):
                 "ip": request.remote_addr,
                 "action": action,
                 "target": target,
-                "detail": __import__("json").dumps(detail or {}),
+                "detail": json.dumps(detail or {}),
             })
             conn.commit()
     except Exception:
@@ -73,7 +78,7 @@ def list_users():
         return jsonify({"error": "DB unavailable"}), 503
     with db.slave_conn() as conn:
         rows = conn.execute(
-            text("SELECT id, username, role, enabled, last_login, created_at FROM users ORDER BY id")
+            text("SELECT id, username, role, enabled, last_login, created_at FROM users WHERE enabled=1 ORDER BY id")
         ).mappings().all()
     return jsonify({"users": [_row_to_dict(r) for r in rows], "total": len(rows)})
 
@@ -89,8 +94,8 @@ def create_user():
 
     if not username:
         return jsonify({"error": "用户名不能为空"}), 400
-    if len(username) < 3 or len(username) > 50:
-        return jsonify({"error": "用户名长度 3-50 字符"}), 400
+    if not _USERNAME_RE.match(username):
+        return jsonify({"error": "用户名只允许字母、数字、下划线和连字符，长度 3-32"}), 400
     if len(password) < 6:
         return jsonify({"error": "密码至少 6 位"}), 400
     if role not in _VALID_ROLES:
@@ -160,24 +165,34 @@ def change_password(user_id: int):
     if len(new_pw) < 6:
         return jsonify({"error": "新密码至少 6 位"}), 400
 
-    # 非 admin 需要验证旧密码
-    if not is_admin:
-        old_pw = data.get("old_password") or ""
-        db = current_app.config.get("db")
-        if not db:
-            return jsonify({"error": "DB unavailable"}), 503
-        with db.slave_conn() as conn:
-            row = conn.execute(
-                text("SELECT password_hash FROM users WHERE id=:id AND enabled=1"),
-                {"id": user_id}
-            ).mappings().first()
-        if not row or not bcrypt.checkpw(old_pw.encode(), row["password_hash"].encode()):
-            return jsonify({"error": "旧密码错误"}), 401
-
-    new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
     db = current_app.config.get("db")
     if not db:
         return jsonify({"error": "DB unavailable"}), 503
+
+    # 非 admin 需要在同一事务内验证旧密码后再更新，防止并发竞态
+    if not is_admin:
+        old_pw = data.get("old_password") or ""
+        with db.master_conn() as conn:
+            row = conn.execute(
+                text("SELECT password_hash FROM users WHERE id=:id AND enabled=1 FOR UPDATE"),
+                {"id": user_id}
+            ).mappings().first()
+            if not row:
+                return jsonify({"error": "用户不存在"}), 404
+            stored = row["password_hash"]
+            if isinstance(stored, str):
+                stored = stored.encode()
+            if not bcrypt.checkpw(old_pw.encode(), stored):
+                return jsonify({"error": "旧密码错误"}), 401
+            new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+            conn.execute(
+                text("UPDATE users SET password_hash=:h WHERE id=:id"), {"h": new_hash, "id": user_id}
+            )
+            conn.commit()
+        _audit("user.password_change", f"users/{user_id}", {"by_admin": False})
+        return jsonify({"status": "ok"})
+
+    new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
     with db.master_conn() as conn:
         result = conn.execute(
             text("UPDATE users SET password_hash=:h WHERE id=:id"), {"h": new_hash, "id": user_id}

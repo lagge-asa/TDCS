@@ -36,6 +36,7 @@ class ConfigManager:
     def __init__(self, config_path: str):
         self._path = config_path
         self._config: Optional[AppConfig] = None
+        self._task_index: dict = {}  # task_id -> TaskConfig，O(1) 查找
         self._lock = threading.Lock()
         self._listeners: List[ConfigChangeListener] = []
 
@@ -47,6 +48,7 @@ class ConfigManager:
             raise ConfigValidationError(
                 "Configuration validation failed: " + str(errors))
         self._config = self._build(raw)
+        self._task_index = {t.task_id: t for t in self._config.tasks}
         logger.info("Config loaded: %s, %d tasks",
                     self._config.instance_id, len(self._config.tasks))
 
@@ -62,6 +64,7 @@ class ConfigManager:
             with self._lock:
                 old_config = self._config
                 self._config = new_config
+                self._task_index = {t.task_id: t for t in new_config.tasks}
                 listeners = list(self._listeners)
             failed = []
             for fn in listeners:
@@ -76,6 +79,7 @@ class ConfigManager:
                 logger.info("Config hot-reloaded successfully")
         except Exception as e:
             logger.error("Config hot-reload failed, keeping old: %s", e)
+            raise  # 让调用方（config_api）能正确返回 500
 
     @property
     def config(self) -> AppConfig:
@@ -88,10 +92,8 @@ class ConfigManager:
         self._listeners.append(fn)
 
     def get_task(self, task_id: str) -> Optional[TaskConfig]:
-        for t in self.config.tasks:
-            if t.task_id == task_id:
-                return t
-        return None
+        """O(1) 按 task_id 查找任务配置。"""
+        return self._task_index.get(task_id)
 
     # -- internal --
 

@@ -108,10 +108,22 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     tm.start_all()
 
     if cfg.web.enabled:
+        _stop_for_web = threading.Event() if stop_event is None else None
+
+        def _web_wrapper():
+            try:
+                run_server(app, cfg.web.host, cfg.web.port, cfg.web.threads)
+            except Exception as exc:
+                logger.error("Web server crashed: %s", exc)
+            finally:
+                # Web 线程退出（含崩溃）时触发主停止信号
+                if _stop_for_web is not None:
+                    _stop_for_web.set()
+
         web_thread = threading.Thread(
-            target=run_server,
-            args=(app, cfg.web.host, cfg.web.port, cfg.web.threads),
+            target=_web_wrapper,
             daemon=True,
+            name="WebServer",
         )
         web_thread.start()
 
@@ -125,14 +137,21 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
         stop = threading.Event()
         signal.signal(signal.SIGINT, lambda *_: stop.set())
         signal.signal(signal.SIGTERM, lambda *_: stop.set())
+        # Web 线程崩溃也触发优雅退出
+        if cfg.web.enabled and _stop_for_web is not None:
+            threading.Thread(
+                target=lambda: (_stop_for_web.wait(), stop.set()),
+                daemon=True, name="WebCrashWatcher",
+            ).start()
         stop.wait()
 
     logger.info("ETL Service stopping...")
-    pool.stop()
+    # 关闭顺序：先停 registry（worker 可能还在跑清洗），再等 pool 完成，最后释放 DB
+    cleaner_registry.stop_watching()
+    pool.stop()          # 发停止信号并等待所有 worker 线程退出
     if cfg.ha.enabled:
         ha.stop()
-    cleaner_registry.stop_watching()
-    db.dispose()
+    db.dispose()         # 所有 worker 已退出后才释放连接池
 
 
 if __name__ == "__main__":
