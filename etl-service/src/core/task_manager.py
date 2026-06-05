@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import threading
+import uuid
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -96,15 +97,21 @@ class TaskManager:
             return
         os.makedirs(task.dead_letter_dir, exist_ok=True)
         name, ext = os.path.splitext(os.path.basename(file_path))
-        dst = os.path.join(task.dead_letter_dir,
-                           os.path.basename(file_path))
-        if os.path.exists(dst):
-            ts = datetime.now().strftime("%Y%m%d%H%M%S")
-            dst = os.path.join(task.dead_letter_dir, f"{name}_{ts}{ext}")
+        # 用 uuid4 短码确保目标路径全局唯一，避免并发或同秒内冲突导致覆盖
+        uid = uuid.uuid4().hex[:8]
+        dst = os.path.join(task.dead_letter_dir, f"{name}_{uid}{ext}")
         try:
             shutil.move(file_path, dst)
             logger.warning("Moved to dead letter: %s -> %s",
                            file_path, dst)
+        except FileNotFoundError:
+            # 区分源文件缺失和目标目录消失，给出精确日志
+            if not os.path.exists(file_path):
+                logger.warning(
+                    "Dead letter source not found (already moved?): %s", file_path)
+            else:
+                logger.error(
+                    "Dead letter target dir missing: %s", task.dead_letter_dir)
         except Exception as e:
             logger.error("Failed to move to dead letter: %s", e)
 
@@ -137,11 +144,13 @@ class TaskManager:
             if (now.day == 1
                     and month_key != self._last_lifecycle_month
                     and self._lifecycle):
-                try:
-                    for task in self._cm.config.tasks:
-                        if task.retention_months > 0:
+                for task in self._cm.config.tasks:
+                    if task.retention_months > 0:
+                        try:
                             self._lifecycle.run(task)
-                    self._last_lifecycle_month = month_key
-                except Exception as e:
-                    logger.error("Monthly lifecycle error: %s", e)
+                        except Exception as e:
+                            # 单个 task 失败不影响其他 task
+                            logger.error("Monthly lifecycle error for task %s: %s",
+                                         task.task_id, e)
+                self._last_lifecycle_month = month_key
             self._stop.wait(3600)  # 每小时检查一次，stop 时可立即唤醒

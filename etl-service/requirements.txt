@@ -25,3 +25,4 @@ pywin32==311
 
 # Watcher
 watchdog==6.0.0
+pandas==3.0.3

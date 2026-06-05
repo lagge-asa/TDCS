@@ -19,12 +19,13 @@ ROLE_LEVELS = {"viewer": 1, "operator": 2, "admin": 3}
 
 def generate_token(user_id: int, username: str,
                    role: str, expire_hours: int) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "username": username,
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=expire_hours),
-        "iat": datetime.now(timezone.utc),
+        "iat": now,
+        "exp": now + timedelta(hours=expire_hours),
     }
     return jwt.encode(
         payload,
@@ -49,9 +50,11 @@ def require_auth(min_role: str = "viewer"):
                     algorithms=["HS256"],
                 )
             except jwt.ExpiredSignatureError:
-                return jsonify({"error": "Token expired"}), 401
+                return jsonify({"error": "Token expired",
+                                "error_code": "token_expired"}), 401
             except jwt.InvalidTokenError:
-                return jsonify({"error": "Invalid token"}), 401
+                return jsonify({"error": "Invalid token",
+                                "error_code": "token_invalid"}), 401
 
             user_role = payload.get("role", "viewer")
             if ROLE_LEVELS.get(user_role, 0) < ROLE_LEVELS.get(min_role, 0):

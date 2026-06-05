@@ -3,6 +3,11 @@
 
 逐 batch Extract -> Transform -> Load, 全程不积累全量数据.
 PipelineResult.quality_report 直接引用 QualityReport 对象.
+
+优化:
+- load_batch 异常区分可重试（RetryableError）和不可重试（FatalError）
+- ensure_table_exists 由 Pipeline 层维护进程级 set，避免每 batch 都加锁
+- elapsed_ms 仅在正常完成时包含完整耗时
 """
 
 import time
@@ -15,6 +20,15 @@ from typing import Optional
 from .exceptions import RetryableError, FatalError, SkipFileError
 
 logger = logging.getLogger(__name__)
+
+# MySQL 瞬时可重试错误码
+_MYSQL_RETRYABLE_ERRCODE = frozenset({
+    1040,   # Too many connections
+    1213,   # Deadlock found
+    2006,   # MySQL server has gone away
+    2013,   # Lost connection
+    2055,   # Lost connection during query
+})
 
 
 class PipelineStatus(Enum):
@@ -44,6 +58,8 @@ class ETLPipeline:
         self.loader = loader
         self.encryption = encryption
         self.quality_reporter = quality_reporter
+        # 进程级缓存：已确认存在的表名，避免每 batch 都获取 table_router 内部锁
+        self._known_tables: set = set()
 
     def execute(self, file_path: str, task_config) -> PipelineResult:
         result = PipelineResult(status=PipelineStatus.SUCCESS)
@@ -65,8 +81,9 @@ class ETLPipeline:
                     )
                 else:
                     transformed = batch
+
                 # None 行视为过滤掉 (错误行)
-                # 用 zip_longest 检测 transform 返回行数不足的情况
+                # zip_longest 检测 transform 返回行数不一致的情况
                 _MISSING = object()  # 哨兵值：transform 未返回对应行
                 valid = []
                 for orig, out in zip_longest(batch, transformed,
@@ -74,13 +91,19 @@ class ETLPipeline:
                     if out is _MISSING:
                         # transform 返回行数少于输入，原始行计入错误
                         error_rows.append(orig)
+                    elif orig is _MISSING:
+                        # transform 返回行数多于输入，多余行丢弃（记录告警）
+                        logger.warning(
+                            "Transform returned extra row (task %s, batch size %d), skipped",
+                            task_config.task_id, len(batch))
+                        break
                     elif out is not None:
                         valid.append(out)
                     else:
                         error_rows.append(orig)
-                dropped = len(batch) - len(valid)
+
                 result.valid_count += len(valid)
-                result.error_count += dropped
+                result.error_count += len(batch) - len(valid)
 
                 if not valid:
                     continue
@@ -91,12 +114,14 @@ class ETLPipeline:
                         valid, task_config)
 
                 # Route & Load
-                grouped = self.table_router.group_by_table(
-                    valid, task_config)
+                grouped = self.table_router.group_by_table(valid, task_config)
                 for table_name, rows in grouped.items():
-                    self.table_router.ensure_table_exists(
-                        table_name, task_config)
-                    self.loader.load_batch(table_name, rows)
+                    # 进程级 set 命中则跳过锁，首次 miss 才委托 table_router
+                    if table_name not in self._known_tables:
+                        self.table_router.ensure_table_exists(
+                            table_name, task_config)
+                        self._known_tables.add(table_name)
+                    self._load_with_retry(table_name, rows)
 
         except SkipFileError as e:
             result.status = PipelineStatus.SKIPPED
@@ -110,7 +135,7 @@ class ETLPipeline:
 
         result.elapsed_ms = int((time.monotonic() - start) * 1000)
 
-        # 质量报告 (引用 QualityReport 对象, 非独立计算 score)
+        # 质量报告（仅在有数据时计算）
         if self.quality_reporter and result.raw_count > 0:
             result.quality_report = self.quality_reporter.calculate(
                 rows=None,
@@ -119,3 +144,21 @@ class ETLPipeline:
             )
 
         return result
+
+    def _load_with_retry(self, table_name: str, rows: list) -> None:
+        """执行 load_batch，区分可重试错误和致命错误."""
+        try:
+            self.loader.load_batch(table_name, rows)
+        except Exception as e:
+            # 识别 MySQL 瞬时错误（连接断开、死锁）-> RetryableError
+            err_str = str(e)
+            errno = getattr(e, "orig", None)
+            if errno is not None:
+                errno = getattr(errno, "args", [None])[0]
+            if (errno in _MYSQL_RETRYABLE_ERRCODE
+                    or "gone away" in err_str.lower()
+                    or "deadlock" in err_str.lower()
+                    or "lost connection" in err_str.lower()):
+                raise RetryableError(f"DB transient error on {table_name}: {e}")
+            # 其他错误（schema 不匹配、数据截断等）-> FatalError
+            raise FatalError(f"Load failed on {table_name}: {e}")

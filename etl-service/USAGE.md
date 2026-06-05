@@ -5,13 +5,15 @@
 1. [环境准备](#1-环境准备)
 2. [数据库初始化](#2-数据库初始化)
 3. [配置文件](#3-配置文件)
-4. [自定义清洗代码](#4-自定义清洗代码)
-5. [启动服务](#5-启动服务)
-6. [Web API](#6-web-api)
-7. [监控与告警](#7-监控与告警)
-8. [高可用部署](#8-高可用部署)
-9. [月表生命周期](#9-月表生命周期)
-10. [常见问题](#10-常见问题)
+4. [更改监控文件目录](#4-更改监控文件目录)
+5. [自定义清洗代码](#5-自定义清洗代码)
+6. [清洗模板热插拔](#6-清洗模板热插拔)
+7. [启动服务](#7-启动服务)
+8. [Web API](#8-web-api)
+9. [监控与告警](#9-监控与告警)
+10. [高可用部署](#10-高可用部署)
+11. [月表生命周期](#11-月表生命周期)
+12. [常见问题](#12-常见问题)
 
 ---
 
@@ -174,7 +176,63 @@ CREATE TABLE IF NOT EXISTS `{TABLE_NAME}` (
 
 ---
 
-## 4. 自定义清洗代码
+## 4. 更改监控文件目录
+
+监控目录在 [`config/config.yaml`](config/config.yaml) 的 `tasks[].monitor` 块中配置：
+
+```yaml
+tasks:
+  - task_id: "sample_import"
+    monitor:
+      folder_path: "D:\\data\\input"       # ← 修改此处指向目标目录
+      file_extensions: [".csv"]            # 只处理指定扩展名，空列表处理所有文件
+      recursive: false                      # 是否递归扫描子目录
+      debounce_seconds: 3                   # 文件写入停止后等待 N 秒再处理
+      stability_check_interval: 1          # 稳定性检查间隔（秒）
+      stability_check_count: 3             # 连续 N 次大小不变才认为写入完成
+```
+
+**同时监控多种文件类型**
+
+```yaml
+file_extensions: [".csv", ".xlsx", ".json"]
+```
+
+**监控多个目录**（不同来源写入不同目标表），在 `tasks` 下添加多条任务：
+
+```yaml
+tasks:
+  - task_id: "orders"
+    monitor:
+      folder_path: "D:\\data\\orders"
+      file_extensions: [".csv"]
+    table:
+      base_table: "order_data"
+      # ...
+
+  - task_id: "sensors"
+    monitor:
+      folder_path: "D:\\data\\sensors"
+      file_extensions: [".json"]
+    table:
+      base_table: "sensor_data"
+      # ...
+```
+
+**修改后使配置生效**（二选一）：
+
+- **热重载（无需重启）**：在 Web 界面 **"配置"** Tab 点击「重新加载配置」，或调用 API：
+  ```bash
+  curl -X POST http://127.0.0.1:8080/api/v1/config/reload \
+    -H "Authorization: Bearer <token>"
+  ```
+- **重启服务**：重新执行 `start.bat`。
+
+> 配置校验失败时自动保留旧配置，不影响正在运行的任务。
+
+---
+
+## 5. 自定义清洗代码
 
 在 `custom_etl/` 目录下创建 Python 模块。
 
@@ -218,7 +276,59 @@ print(ok, err)
 
 ---
 
-## 5. 启动服务
+## 6. 清洗模板热插拔
+
+清洗模板存放在 `clean_templates/` 目录，服务运行期间会自动侦测文件变化，**无需重启即可生效**。
+
+**模板格式**
+
+每个 `.py` 文件即一个清洗模板，必须定义 `clean_data` 函数：
+
+```python
+import pandas as pd
+
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    参数:  df — 原始数据 DataFrame
+    返回:  清洗后的 DataFrame
+    """
+    df = df.drop_duplicates()
+    df.columns = df.columns.str.strip()
+    return df
+```
+
+**热插拔操作**
+
+| 操作 | 效果 |
+|------|------|
+| 新建 `clean_templates/my_cleaner.py` | 立即注册，API 可调用 |
+| 修改已有模板文件 | 下次调用时自动使用新版本 |
+| 删除模板文件 | 从注册表中移除 |
+
+**通过 API 调用模板**
+
+```bash
+# 列出所有可用模板
+GET /api/v1/cleaners/
+
+# 对上传文件执行清洗（返回 download_token）
+POST /api/v1/cleaners/run
+Content-Type: multipart/form-data
+  file=<csv_or_excel_file>
+  cleaner=<模板名，不含 .py>
+
+# 下载清洗结果
+GET /api/v1/cleaners/download/<token>
+
+# 校验模板语法
+POST /api/v1/cleaners/<name>/validate
+```
+
+> 模板在独立子进程中运行，`print()` 输出会重定向到 stderr，不会污染 API 响应。详见 [`clean_templates/README.md`](clean_templates/README.md)。
+
+---
+
+## 7. 启动服务
 
 ### 直接运行
 
@@ -254,11 +364,11 @@ curl -X POST http://127.0.0.1:8080/api/v1/config/reload \
 
 ---
 
-## 6. Web API
+## 8. Web API
 
 默认地址：`http://127.0.0.1:8080`
 
-### 6.1 认证
+### 8.1 认证
 
 所有接口（除 `/health`）需要 JWT Token。
 
@@ -278,15 +388,15 @@ curl -X POST http://127.0.0.1:8080/api/v1/auth/login \
 Authorization: Bearer eyJ...
 ```
 
-### 6.2 角色权限
+### 8.2 角色权限
 
 | 角色 | 权限 |
 |------|------|
 | `viewer` | 查看任务、文件状态、质量报告 |
-| `operator` | 在 viewer 基础上，可暂停/恢复/触发任务、重试文件 |
-| `admin` | 全部权限，包括用户管理、配置热加载 |
+| `operator` | 在 viewer 基础上，可暂停/恢复/触发任务、重试文件、执行清洗 |
+| `admin` | 全部权限，包括用户管理、配置热加载、审计日志查看 |
 
-### 6.3 接口列表
+### 8.3 接口列表
 
 **系统**
 
@@ -296,40 +406,88 @@ Authorization: Bearer eyJ...
 | GET | `/metrics` | 无 | Prometheus 指标 |
 | POST | `/api/v1/auth/login` | 无 | 登录 |
 
+**仪表盘**
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/dashboard/` | viewer | 聚合 KPI（文件统计、任务数、DB/HA 状态、最近文件） |
+
 **任务管理**
 
 | 方法 | 路径 | 权限 | 说明 |
 |------|------|------|------|
-| GET | `/api/v1/tasks` | viewer | 列出所有任务 |
+| GET | `/api/v1/tasks/` | viewer | 列出所有任务（含实时统计） |
+| GET | `/api/v1/tasks/{task_id}` | viewer | 任务详情 |
+| GET | `/api/v1/tasks/{task_id}/stats` | viewer | 按日分组的处理统计（近 N 天） |
 | POST | `/api/v1/tasks/{task_id}/pause` | operator | 暂停任务 |
 | POST | `/api/v1/tasks/{task_id}/resume` | operator | 恢复任务 |
 | POST | `/api/v1/tasks/{task_id}/trigger` | operator | 立即触发扫描 |
+| POST | `/api/v1/tasks/{task_id}/enable` | admin | 启用任务 |
+| POST | `/api/v1/tasks/{task_id}/disable` | admin | 禁用任务 |
 
 **文件状态**
 
 | 方法 | 路径 | 权限 | 说明 |
 |------|------|------|------|
-| GET | `/api/v1/files` | viewer | 查询文件处理状态 |
+| GET | `/api/v1/files/` | viewer | 查询文件列表（分页、task_id 过滤） |
+| GET | `/api/v1/files/summary` | viewer | 各状态文件数与行数汇总 |
+| GET | `/api/v1/files/{file_id}` | viewer | 单文件详情（含 error_message） |
 | POST | `/api/v1/files/{file_id}/retry` | operator | 手动重试失败文件 |
 
 **数据质量**
 
 | 方法 | 路径 | 权限 | 说明 |
 |------|------|------|------|
-| GET | `/api/v1/quality/{task_id}` | viewer | 查看质量报告 |
+| GET | `/api/v1/quality/{task_id}` | viewer | 质量报告列表（分页） |
+| GET | `/api/v1/quality/{task_id}/latest` | viewer | 最新一条质量报告 |
+| GET | `/api/v1/quality/{task_id}/trend` | viewer | 近 N 天质量评分趋势 |
 
 **用户管理**
 
 | 方法 | 路径 | 权限 | 说明 |
 |------|------|------|------|
-| GET | `/api/v1/users` | admin | 列出用户 |
+| GET | `/api/v1/users/` | admin | 列出所有用户 |
+| GET | `/api/v1/users/me` | viewer | 查看当前登录用户信息 |
+| POST | `/api/v1/users/` | admin | 创建用户 |
 | DELETE | `/api/v1/users/{user_id}` | admin | 删除用户 |
+| PUT | `/api/v1/users/{user_id}/password` | viewer | 修改密码（admin 可改任意用户） |
+| PUT | `/api/v1/users/{user_id}/role` | admin | 修改角色 |
+
+**审计日志**
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/audit-logs/` | admin | 查询审计日志（分页、user/action 过滤） |
+
+**配置管理**
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/config/` | admin | 查看当前运行时配置（脱敏） |
+| POST | `/api/v1/config/reload` | admin | 热重载配置文件 |
+
+**月表管理**
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/monthly/` | viewer | 月表列表（task_id 过滤） |
+| POST | `/api/v1/monthly/{task_id}/run` | admin | 手动触发月表生命周期 |
+
+**清洗工作台**
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/cleaners/` | viewer | 列出所有清洗模板 |
+| GET | `/api/v1/cleaners/{name}` | viewer | 查看模板详情 |
+| POST | `/api/v1/cleaners/run` | operator | 上传文件并执行清洗 |
+| GET | `/api/v1/cleaners/download/{token}` | viewer | 下载清洗结果（30 分钟有效） |
+| POST | `/api/v1/cleaners/{name}/validate` | operator | 校验模板语法 |
 
 ---
 
-## 7. 监控与告警
+## 9. 监控与告警
 
-### 7.1 Prometheus 指标
+### 9.1 Prometheus 指标
 
 访问 `http://127.0.0.1:8080/metrics` 获取所有指标。
 
@@ -359,7 +517,7 @@ scrape_configs:
     scrape_interval: 15s
 ```
 
-### 7.2 告警规则
+### 9.2 告警规则
 
 在 `config.yaml` 中配置触发阈值：
 
@@ -379,7 +537,7 @@ monitoring:
 
 ---
 
-## 8. 高可用部署
+## 10. 高可用部署
 
 多实例部署时，通过 MySQL 乐观锁选主，同一时刻只有一个实例处于 ACTIVE 状态处理文件。
 
@@ -410,7 +568,7 @@ high_availability:
 
 ---
 
-## 9. 月表生命周期
+## 11. 月表生命周期
 
 数据按月自动分表，表名格式为 `{base_table}_YYYYMM`，例如 `order_data_202501`。
 
@@ -426,7 +584,14 @@ ACTIVE → ARCHIVED → DROPPED
 - `ARCHIVED`：超过 `retention_months`，标记归档（数据仍在，不删除）
 - `DROPPED`：调用 `drop_archived` 后物理删除
 
-**手动触发归档**（通过 Python）
+**手动触发归档（API）**
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/v1/monthly/{task_id}/run \
+  -H "Authorization: Bearer <token>"
+```
+
+**手动触发归档（Python）**
 
 ```python
 from src.etl.monthly_lifecycle import MonthlyTableLifecycle
@@ -441,7 +606,7 @@ lifecycle.drop_archived(task_config)
 
 ---
 
-## 10. 常见问题
+## 12. 常见问题
 
 **Q: 文件被检测到但没有处理？**
 
@@ -453,7 +618,8 @@ lifecycle.drop_archived(task_config)
 
 **Q: 清洗代码修改后如何生效？**
 
-清洗代码每次处理文件时都会重新加载（子进程模式），直接修改文件即可，无需重启服务。
+- `custom_etl/` 下的清洗代码（pipeline 用）：每次处理文件时重新加载子进程，直接修改即可，无需重启。
+- `clean_templates/` 下的清洗模板（工作台用）：watchdog 自动侦测变化，新增/修改/删除均立即生效，无需重启。
 
 **Q: 如何处理死信目录中的文件？**
 
@@ -490,3 +656,7 @@ WHERE file_path = '/path/to/file.csv'
 ORDER BY created_at DESC
 LIMIT 1;
 ```
+
+**Q: 如何添加第二个监控目录？**
+
+在 `config/config.yaml` 的 `tasks` 列表下新增一条任务，填写新的 `task_id`、`monitor.folder_path` 和 `table.base_table`，然后热重载配置（无需重启）。详见[第 4 章](#4-更改监控文件目录)。

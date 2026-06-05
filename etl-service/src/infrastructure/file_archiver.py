@@ -7,6 +7,7 @@
 """
 
 import hashlib
+import uuid
 import logging
 import os
 import shutil
@@ -83,27 +84,34 @@ class FileArchiver:
     # -- internal --
 
     def _safe_move(self, src: str, dst: str) -> None:
-        """跨分区安全移动: copy2 -> 校验 -> replace -> remove."""
+        """跨分区安全移动: copy2 -> 校验 -> move -> remove."""
         src_size = os.path.getsize(src)
         src_md5 = _md5(src)
 
-        tmp = dst + ".tmp"
+        tmp = dst + ".tmp_" + uuid.uuid4().hex[:8]
         shutil.copy2(src, tmp)
 
         # 完整性校验
         if os.path.getsize(tmp) != src_size or _md5(tmp) != src_md5:
-            os.unlink(tmp)
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
             raise IOError(
                 f"Archive integrity check failed: {src} -> {dst}")
 
-        os.replace(tmp, dst)  # 原子替换
-        os.unlink(src)
+        shutil.move(tmp, dst)  # 跨卷兼容（Windows/Linux 均支持）
+        try:
+            os.unlink(src)
+        except OSError as e:
+            # 源文件可能已被其他进程移走，记录警告但不阻断
+            logger.warning("Source file removal failed after archive: %s: %s", src, e)
         logger.info("Archived: %s -> %s", src, dst)
 
     def _compress(self, file_path: str) -> None:
         """原子压缩: 先写 .tmp 再 replace."""
         zip_path = file_path + ".zip"
-        tmp_path = zip_path + ".tmp"
+        tmp_path = zip_path + ".tmp_" + uuid.uuid4().hex[:6]
         try:
             with zipfile.ZipFile(tmp_path, "w",
                                   zipfile.ZIP_DEFLATED) as zf:
@@ -118,13 +126,13 @@ class FileArchiver:
             logger.error("Compress failed: %s", e)
 
     @staticmethod
-    def _resolve_dst(src: str, archive_dir: str) -> str:
-        """解决目标路径冲突: 已存在则加时间戳后缀."""
+    def _resolve_dst(archive_dir: str, src: str) -> str:
+        """解决目标路径冲突: 已存在则加 uuid 后缀."""
         dst = os.path.join(archive_dir, os.path.basename(src))
         if os.path.exists(dst):
-            ts = datetime.now().strftime("%Y%m%d%H%M%S")
+            uid = uuid.uuid4().hex[:8]
             name, ext = os.path.splitext(os.path.basename(src))
-            dst = os.path.join(archive_dir, f"{name}_{ts}{ext}")
+            dst = os.path.join(archive_dir, f"{name}_{uid}{ext}")
         return dst
 
 
