@@ -83,7 +83,7 @@ class ETLPipeline:
                     transformed = batch
 
                 # None 行视为过滤掉 (错误行)
-                # zip_longest 检测 transform 返回行数不足的情况
+                # zip_longest 检测 transform 返回行数不一致的情况
                 _MISSING = object()  # 哨兵值：transform 未返回对应行
                 valid = []
                 for orig, out in zip_longest(batch, transformed,
@@ -91,6 +91,12 @@ class ETLPipeline:
                     if out is _MISSING:
                         # transform 返回行数少于输入，原始行计入错误
                         error_rows.append(orig)
+                    elif orig is _MISSING:
+                        # transform 返回行数多于输入，多余行丢弃（记录告警）
+                        logger.warning(
+                            "Transform returned extra row (task %s, batch size %d), skipped",
+                            task_config.task_id, len(batch))
+                        break
                     elif out is not None:
                         valid.append(out)
                     else:

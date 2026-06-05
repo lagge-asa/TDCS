@@ -7,7 +7,14 @@ from ..auth import generate_token, require_auth
 logger = logging.getLogger(__name__)
 
 # dummy hash 用于消除用户名枚举时序侧信道（用户不存在时也执行等耗时的 checkpw）
-_DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt())
+_dummy_hash_cache = None
+
+def _get_dummy_hash() -> bytes:
+    """懒加载 dummy hash：只在首次调用时计算一次。"""
+    global _dummy_hash_cache
+    if _dummy_hash_cache is None:
+        _dummy_hash_cache = bcrypt.hashpw(b"dummy", bcrypt.gensalt())
+    return _dummy_hash_cache
 
 bp = Blueprint("system", __name__)
 
@@ -61,7 +68,7 @@ def login():
 
         if not row or not row["enabled"]:
             # 消除用户名枚举时序侧信道：用户不存在时也执行一次 checkpw
-            bcrypt.checkpw(password.encode(), _DUMMY_HASH)
+            bcrypt.checkpw(password.encode(), _get_dummy_hash())
             return jsonify({"error": "Invalid credentials"}), 401
 
         stored = row["password_hash"]

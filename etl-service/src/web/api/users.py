@@ -115,9 +115,12 @@ def create_user():
             conn.commit()
             new_id = result.lastrowid
     except Exception as e:
-        if "Duplicate" in str(e):
+        # 判断唯一约束冲突（MySQL 1062 / PostgreSQL 23505 / 通用 'Duplicate' 关键字）
+        err_str = str(e)
+        if "Duplicate" in err_str or "1062" in err_str or "23505" in err_str:
             return jsonify({"error": f"用户名 '{username}' 已存在"}), 409
-        return jsonify({"error": str(e)}), 500
+        logger.error("create_user DB error: %s", e)
+        return jsonify({"error": "创建用户失败"}), 500
 
     _audit("user.create", f"users/{new_id}", {"username": username, "role": role})
     return jsonify({"id": new_id, "username": username, "role": role}), 201
@@ -228,8 +231,9 @@ def change_role(user_id: int):
         result = conn.execute(
             text("UPDATE users SET role=:r WHERE id=:id"), {"r": new_role, "id": user_id}
         )
+        rowcount = result.rowcount  # 在连接关闭前读取
         conn.commit()
-    if result.rowcount == 0:
+    if rowcount == 0:
         return jsonify({"error": "用户不存在"}), 404
 
     _audit("user.role_change", f"users/{user_id}", {"new_role": new_role})

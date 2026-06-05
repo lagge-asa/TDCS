@@ -57,7 +57,12 @@ def create_app(config_manager, task_manager=None,
 
     @app.get("/")
     def index():
-        return send_from_directory(static_dir, "index.html")
+        resp = send_from_directory(static_dir, "index.html")
+        # 防止浏览器缓存旧页面（前端热更新时用户无感知）
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
 
     app.register_blueprint(system_bp)
     app.register_blueprint(tasks_bp, url_prefix="/api/v1/tasks")

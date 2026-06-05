@@ -121,20 +121,30 @@ class StateTracker:
         返回自增后的 retry_count，调用方无需二次查询即可判断是否超限。
         """
         with self.db.master_conn() as conn:
-            conn.execute(text("""
+            # 先更新状态，不触碰主键 id（原 LAST_INSERT_ID 写法会覆盖主键，有 bug）
+            result = conn.execute(text("""
                 UPDATE processed_files
                 SET status = 'FAILED',
                     error_type = :et, error_message = :em,
                     retry_count = retry_count + 1,
-                    claim_expires_at = NULL,
-                    id = LAST_INSERT_ID(retry_count + 1)
+                    claim_expires_at = NULL
                 WHERE task_id = :tid AND file_path = :fp
                   AND file_mtime = :mt
             """), dict(tid=task_id, fp=file_path, mt=file_mtime,
                        et=error_type, em=error_msg))
-            row = conn.execute(text("SELECT LAST_INSERT_ID() AS cnt")).fetchone()
+            # 在同一事务内查询更新后的 retry_count（避免 LAST_INSERT_ID 主键覆盖问题）
+            if result.rowcount > 0:
+                row = conn.execute(text("""
+                    SELECT retry_count FROM processed_files
+                    WHERE task_id = :tid AND file_path = :fp
+                      AND file_mtime = :mt
+                    LIMIT 1
+                """), dict(tid=task_id, fp=file_path, mt=file_mtime)).fetchone()
+                new_retry = row.retry_count if row else 1
+            else:
+                new_retry = 1
             conn.commit()
-        return row.cnt if row else 1
+        return new_retry
 
     def mark_skipped(self, task_id: str, file_path: str,
                      file_mtime: int, reason: str) -> None:

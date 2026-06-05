@@ -42,7 +42,7 @@ _CLEANER_RUNNER = Path(__file__).parent.parent.parent / "etl" / "_cleaner_runner
 _SENSITIVE_KEYWORDS = (
     "ETL_", "SECRET", "PASSWORD", "PASSWD", "TOKEN",
     "API_KEY", "APIKEY", "AWS_", "ENCRYPTION", "PRIVATE",
-    "CREDENTIAL", "AUTH", "DB_PASS", "MYSQL_", "REDIS_PASS",
+    "CREDENTIAL", "DB_PASS", "MYSQL_", "REDIS_PASS",
 )
 
 
@@ -198,8 +198,13 @@ def run_cleaner():
     if not uploaded.filename:
         return jsonify({"error": "文件名为空"}), 400
 
-    # 文件大小限制
+    # 文件大小限制：先检查 content_length 再读入内存，超限直接拒绝
+    content_length = request.content_length or 0
+    if content_length > _MAX_UPLOAD_MB * 1024 * 1024:
+        return jsonify({"error": f"文件超过 {_MAX_UPLOAD_MB}MB 限制"}), 413
+
     file_bytes = uploaded.read()
+    # 再次检查实际读取大小（content_length 可能不可信或为零）
     if len(file_bytes) > _MAX_UPLOAD_MB * 1024 * 1024:
         return jsonify({"error": f"文件超过 {_MAX_UPLOAD_MB}MB 限制"}), 413
 

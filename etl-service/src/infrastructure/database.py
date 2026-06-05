@@ -31,6 +31,54 @@ logger = logging.getLogger(__name__)
 _SLAVE_COOLDOWN = 60
 
 
+class _ManagedConn:
+    """支持 slave->master fallback 的数据库连接上下文管理器.
+
+    避开 @contextmanager 的 yield 次数限制，支持连接失败后的安全回退。
+    """
+
+    def __init__(self, db, engine, slave_idx):
+        self.db = db
+        self.engine = engine
+        self._slave_idx = slave_idx
+        self._is_master = engine is db._master
+        self._conn = None
+
+    def __enter__(self):
+        try:
+            self._conn = self.engine.connect()
+            return self._conn
+        except Exception as exc:
+            if self._is_master:
+                raise
+            # slave 连接失败，回退到 master
+            logger.warning(
+                "Slave[%d] conn failed: %s, falling back to master",
+                self._slave_idx, exc)
+            if self._slave_idx is not None:
+                with self.db._health_lock:
+                    self.db._slave_health[self._slave_idx] = time.monotonic()
+            self.engine = self.db._master
+            self._is_master = True
+            self._conn = self.engine.connect()
+            return self._conn
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._conn is None:
+            return False
+        try:
+            if exc_type:
+                self._conn.rollback()
+        except Exception:
+            pass
+        self._conn.close()
+        # 若成功使用的是 slave，标记其恢复健康
+        if not self._is_master and self._slave_idx is not None:
+            with self.db._health_lock:
+                self.db._slave_health[self._slave_idx] = None
+        return False
+
+
 class DatabaseManager:
     """连接池管理器, 支持读写分离."""
 
@@ -68,31 +116,14 @@ class DatabaseManager:
                     pass
                 raise exc
 
-    @contextmanager
     def slave_conn(self):
-        """获取从库连接 (读操作). 无从库或健康从库时降级到主库."""
-        engine, slave_idx = self._pick_slave()
-        if engine is self._master:
-            with self._master.connect() as conn:
-                yield conn
-            return
+        """获取从库连接 (读操作). 无从库或健康从库时降级到主库.
 
-        try:
-            with engine.connect() as conn:
-                yield conn
-            # 成功后恢复健康状态
-            if slave_idx is not None:
-                with self._health_lock:
-                    self._slave_health[slave_idx] = None
-        except Exception:
-            logger.warning("Slave[%d] conn failed, falling back to master",
-                           slave_idx)
-            # 标记从库故障时间
-            if slave_idx is not None:
-                with self._health_lock:
-                    self._slave_health[slave_idx] = time.monotonic()
-            with self._master.connect() as conn:
-                yield conn
+        返回上下文管理器对象，支持 with 语法。内部不依赖 @contextmanager
+        的 yield，因此可以安全地在 fallback 到 master 后仍正确关闭连接。
+        """
+        engine, slave_idx = self._pick_slave()
+        return _ManagedConn(self, engine, slave_idx)
 
     def _pick_slave(self):
         """选择一个健康从库，全部故障时返回主库."""
