@@ -25,6 +25,8 @@ def list_audit_logs():
 
     username = request.args.get("username", "").strip()
     action = request.args.get("action", "").strip()
+    start_date = request.args.get("start_date", "").strip()
+    end_date = request.args.get("end_date", "").strip()
 
     conditions = []
     params = {"limit": page_size, "offset": offset}
@@ -35,6 +37,12 @@ def list_audit_logs():
     if action:
         conditions.append("action LIKE :action")
         params["action"] = f"%{action}%"
+    if start_date:
+        conditions.append("timestamp >= :start_date")
+        params["start_date"] = start_date
+    if end_date:
+        conditions.append("timestamp <= :end_date")
+        params["end_date"] = end_date + " 23:59:59"
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

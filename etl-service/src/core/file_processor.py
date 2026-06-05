@@ -11,12 +11,15 @@ logger = logging.getLogger(__name__)
 
 class FileProcessor:
     def __init__(self, config_manager, state_tracker, pipeline_factory,
-                 quality_reporter, file_archiver):
+                 quality_reporter, file_archiver,
+                 alerter=None, task_manager=None):
         self._cm = config_manager
         self._st = state_tracker
         self._make_pipeline = pipeline_factory
         self._qr = quality_reporter
         self._archiver = file_archiver
+        self._alerter = alerter
+        self._tm = task_manager  # 用于 move_to_dead_letter
 
     def __call__(self, task_id, file_path, file_mtime,
                  file_size, file_hash, breaker):
@@ -47,6 +50,10 @@ class FileProcessor:
                 try:
                     self._qr.save(task_id, file_id, file_path,
                                   result.quality_report, result.elapsed_ms)
+                    # 质量评分告警检查
+                    if self._alerter and hasattr(result.quality_report, 'score'):
+                        self._alerter.check_quality_alert(
+                            task_id, result.quality_report.score)
                 except Exception as e:
                     logger.warning("Quality report save failed: %s", e)
             archive_path = self._archiver.archive_after_success(
@@ -59,16 +66,33 @@ class FileProcessor:
             self._st.mark_skipped(task_id, file_path, file_mtime,
                                    str(result.error))
         elif result.status == PipelineStatus.RETRY:
-            # 可重试错误：标记失败但不计入熔断器，
-            # 由 state_tracker 的 retry_count + claim_expires 机制驱动重试
-            self._st.mark_failed(task_id, file_path, file_mtime,
-                                  type(result.error).__name__,
-                                  str(result.error))
-            logger.warning("Retryable error for %s: %s",
-                           file_path, result.error)
+            # 可重试错误：检查是否已超过最大重试次数
+            retry_count = self._st.get_retry_count(task_id, file_path)
+            max_retries = task_cfg.max_retries if task_cfg else 3
+            if retry_count >= max_retries:
+                # 超过重试上限 -> 死信目录
+                self._st.mark_failed(task_id, file_path, file_mtime,
+                                      type(result.error).__name__,
+                                      str(result.error))
+                if self._tm:
+                    self._tm.move_to_dead_letter(task_id, file_path)
+                if self._alerter:
+                    self._alerter.notify_dead_letter(task_id, file_path)
+                logger.error("Dead letter after %d retries: %s",
+                             retry_count, file_path)
+            else:
+                self._st.mark_failed(task_id, file_path, file_mtime,
+                                      type(result.error).__name__,
+                                      str(result.error))
+                logger.warning("Retryable error (%d/%d) for %s: %s",
+                               retry_count + 1, max_retries,
+                               file_path, result.error)
         else:
-            # FAILED: 不可重试的致命错误，计入熔断器
+            # FAILED: 不可重试的致命错误，计入熔断器，触发告警
             self._st.mark_failed(task_id, file_path, file_mtime,
                                   type(result.error).__name__,
                                   str(result.error))
             breaker.record_failure()
+            if self._alerter:
+                self._alerter.notify_pipeline_failure(
+                    task_id, file_path, str(result.error))

@@ -46,7 +46,10 @@ def login():
     if not row or not row["enabled"]:
         return jsonify({"error": "Invalid credentials"}), 401
 
-    if not bcrypt.checkpw(password.encode(), row["password_hash"].encode()):
+    stored = row["password_hash"]
+    if isinstance(stored, str):
+        stored = stored.encode()
+    if not bcrypt.checkpw(password.encode(), stored):
         return jsonify({"error": "Invalid credentials"}), 401
 
     # 更新 last_login

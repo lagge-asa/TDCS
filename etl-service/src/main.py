@@ -33,6 +33,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     from .etl.transform_sandbox import TransformSandbox
     from .etl.cleaner_registry import CleanerRegistry
     from .monitoring.quality_reporter import QualityReporter
+    from .monitoring.alerting import Alerter
     from .core.pipeline import ETLPipeline
     from .core.task_manager import TaskManager
     from .web.app import create_app, run_server
@@ -76,24 +77,31 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     def make_pipeline(task_id: str) -> ETLPipeline:
         return ETLPipeline(extractor, sandbox, router, loader, enc, qr)
 
-    # 5. Worker Pool
-    process_fn = FileProcessor(cm, st, make_pipeline, qr, archiver)
-    pool = WorkerPool(process_fn, cfg.worker_threads, cfg.queue_maxsize)
+    # 5. 告警
+    alerter = Alerter(cfg.monitoring.alerting)
 
-    # 6. HA
+    # 6. Worker Pool（先占位，process_fn 依赖 tm，tm 依赖 pool，循环依赖用 setter 解决）
+    pool = WorkerPool(None, cfg.worker_threads, cfg.queue_maxsize)
+
+    # 7. HA
     ha = HAElector(
         db, cfg.instance_id, cfg.ha,
         on_become_active=lambda: logger.info("Became ACTIVE"),
         on_become_standby=lambda: logger.info("Became STANDBY"),
     )
 
-    # 7. Task Manager
+    # 8. Task Manager
     tm = TaskManager(cm, db, pool, st, ha, archiver)
 
-    # 8. Web
+    # 9. 现在 tm 已存在，完成 FileProcessor 并注入 pool
+    process_fn = FileProcessor(cm, st, make_pipeline, qr, archiver,
+                               alerter=alerter, task_manager=tm)
+    pool._process_fn = process_fn
+
+    # 10. Web
     app = create_app(cm, tm, pool, ha, qr, enc, db, cleaner_registry)
 
-    # 9. 启动
+    # 11. 启动
     pool.start()
     if cfg.ha.enabled:
         ha.start()
@@ -121,7 +129,8 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
 
     logger.info("ETL Service stopping...")
     pool.stop()
-    ha.stop()
+    if cfg.ha.enabled:
+        ha.stop()
     cleaner_registry.stop_watching()
     db.dispose()
 

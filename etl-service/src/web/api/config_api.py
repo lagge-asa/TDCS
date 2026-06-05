@@ -63,28 +63,63 @@ def get_config():
 @require_auth("admin")
 def reload_config():
     cm = current_app.config["config_manager"]
+    old_cfg = cm.config  # 保存重载前的配置
     try:
         cm.reload()
     except Exception as e:
         return jsonify({"error": f"配置重载失败: {e}"}), 500
 
-    # 写审计日志
-    try:
-        db = current_app.config.get("db")
-        user = getattr(request, "current_user", {})
-        if db:
+    new_cfg = cm.config
+    user = getattr(request, "current_user", {})
+    db = current_app.config.get("db")
+
+    if db:
+        try:
+            # 记录配置变更摘要
+            diff = {
+                "worker_threads": [old_cfg.worker_threads, new_cfg.worker_threads],
+                "task_count": [len(old_cfg.tasks), len(new_cfg.tasks)],
+                "log_level": [old_cfg.log_level, new_cfg.log_level],
+            }
+            changed = {k: v for k, v in diff.items() if v[0] != v[1]}
             with db.master_conn() as conn:
+                # 审计日志
                 conn.execute(text("""
-                    INSERT INTO audit_log (user_id, username, user_ip, action, target, detail)
-                    VALUES (:uid, :uname, :ip, 'config.reload', 'config/config.yaml', :detail)
+                    INSERT INTO audit_log
+                        (user_id, username, user_ip, action, target, detail)
+                    VALUES (:uid, :uname, :ip, 'config.reload',
+                            'config/config.yaml', :detail)
                 """), {
                     "uid": user.get("sub"),
                     "uname": user.get("username"),
                     "ip": request.remote_addr,
-                    "detail": json.dumps({"instance_id": cm.config.instance_id}),
+                    "detail": json.dumps(
+                        {"changed": changed,
+                         "instance_id": new_cfg.instance_id}),
+                })
+                # 配置变更历史（适配实际表结构）
+                conn.execute(text("""
+                    INSERT INTO config_history
+                        (config_type, config_key,
+                         content_before, content_after, changed_by)
+                    VALUES ('main', 'config/config.yaml',
+                            :before, :after, :op)
+                """), {
+                    "op": user.get("username", "unknown"),
+                    "before": json.dumps({
+                        "worker_threads": old_cfg.worker_threads,
+                        "log_level": old_cfg.log_level,
+                        "task_ids": [t.task_id for t in old_cfg.tasks],
+                    }),
+                    "after": json.dumps({
+                        "worker_threads": new_cfg.worker_threads,
+                        "log_level": new_cfg.log_level,
+                        "task_ids": [t.task_id for t in new_cfg.tasks],
+                    }),
                 })
                 conn.commit()
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    return jsonify({"status": "reloaded", "instance_id": cm.config.instance_id})
+    return jsonify({"status": "reloaded",
+                    "instance_id": new_cfg.instance_id})
