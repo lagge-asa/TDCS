@@ -107,6 +107,8 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
         ha.start()
     tm.start_all()
 
+    _stop_for_web: threading.Event = None  # Web 线程崩溃时用于通知主线程
+
     if cfg.web.enabled:
         _stop_for_web = threading.Event() if stop_event is None else None
 

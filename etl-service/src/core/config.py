@@ -75,6 +75,8 @@ class ConfigManager:
                     failed.append(fn.__name__)
             if failed:
                 logger.warning("Hot-reload: %d listener(s) failed: %s", len(failed), failed)
+                raise ConfigValidationError(
+                    f"Config reloaded but {len(failed)} listener(s) failed: {failed}")
             else:
                 logger.info("Config hot-reloaded successfully")
         except Exception as e:

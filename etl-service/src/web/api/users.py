@@ -164,6 +164,8 @@ def change_password(user_id: int):
     new_pw = data.get("new_password") or ""
     if len(new_pw) < 6:
         return jsonify({"error": "新密码至少 6 位"}), 400
+    if len(new_pw) > 72:
+        return jsonify({"error": "密码最长 72 位（bcrypt 限制）"}), 400
 
     db = current_app.config.get("db")
     if not db:
@@ -197,8 +199,9 @@ def change_password(user_id: int):
         result = conn.execute(
             text("UPDATE users SET password_hash=:h WHERE id=:id"), {"h": new_hash, "id": user_id}
         )
+        rowcount = result.rowcount   # 在连接关闭前读取
         conn.commit()
-    if result.rowcount == 0:
+    if rowcount == 0:
         return jsonify({"error": "用户不存在"}), 404
 
     _audit("user.password_change", f"users/{user_id}", {"by_admin": is_admin})

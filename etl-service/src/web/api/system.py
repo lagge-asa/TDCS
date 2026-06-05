@@ -1,9 +1,13 @@
 """系统 API: /health, /metrics, /auth/login"""
 import bcrypt
+import logging
 from flask import Blueprint, jsonify, request, current_app
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from ..auth import generate_token, require_auth
+
+logger = logging.getLogger(__name__)
+
+# dummy hash 用于消除用户名枚举时序侧信道（用户不存在时也执行等耗时的 checkpw）
+_DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt())
 
 bp = Blueprint("system", __name__)
 
@@ -18,7 +22,8 @@ def health():
             with db.master_conn() as conn:
                 conn.execute(text("SELECT 1"))
         except Exception as e:
-            return jsonify({"status": "degraded", "db": str(e)}), 503
+            logger.warning("Health check DB failed: %s", e)
+            return jsonify({"status": "degraded", "db": "connection failed"}), 503
     return jsonify({"status": "ok"})
 
 
@@ -36,7 +41,7 @@ def metrics():
 
 @bp.post("/api/v1/auth/login")
 def login():
-    # 针对登录接口的严格限流（在 limiter 全局 default_limits 之外单独叠加）
+    """登录：返回 JWT token。"""
     data = request.get_json() or {}
     username = data.get("username", "").strip()
     password = data.get("password", "")
@@ -48,7 +53,6 @@ def login():
         return jsonify({"error": "DB unavailable"}), 503
 
     from sqlalchemy import text
-    # SELECT + UPDATE last_login 合并在同一 master 连接，避免主从不一致
     with db.master_conn() as conn:
         row = conn.execute(
             text("SELECT id, password_hash, role, enabled FROM users WHERE username=:u"),
@@ -56,6 +60,8 @@ def login():
         ).mappings().first()
 
         if not row or not row["enabled"]:
+            # 消除用户名枚举时序侧信道：用户不存在时也执行一次 checkpw
+            bcrypt.checkpw(password.encode(), _DUMMY_HASH)
             return jsonify({"error": "Invalid credentials"}), 401
 
         stored = row["password_hash"]
@@ -67,5 +73,6 @@ def login():
         conn.execute(text("UPDATE users SET last_login=NOW() WHERE id=:id"), {"id": row["id"]})
         conn.commit()
 
-    token = generate_token(row["id"], username, row["role"], expire_hours=8)
+    expire_hours = current_app.config.get("TOKEN_EXPIRE_HOURS", 8)
+    token = generate_token(row["id"], username, row["role"], expire_hours=expire_hours)
     return jsonify({"token": token, "role": row["role"], "username": username})

@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import threading
+import uuid
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -96,18 +97,21 @@ class TaskManager:
             return
         os.makedirs(task.dead_letter_dir, exist_ok=True)
         name, ext = os.path.splitext(os.path.basename(file_path))
-        dst = os.path.join(task.dead_letter_dir,
-                           os.path.basename(file_path))
-        if os.path.exists(dst):
-            ts = datetime.now().strftime("%Y%m%d%H%M%S")
-            dst = os.path.join(task.dead_letter_dir, f"{name}_{ts}{ext}")
+        # 用 uuid4 短码确保目标路径全局唯一，避免并发或同秒内冲突导致覆盖
+        uid = uuid.uuid4().hex[:8]
+        dst = os.path.join(task.dead_letter_dir, f"{name}_{uid}{ext}")
         try:
             shutil.move(file_path, dst)
             logger.warning("Moved to dead letter: %s -> %s",
                            file_path, dst)
         except FileNotFoundError:
-            # 文件已不存在（可能已被其他进程移走），记录警告但不阻断后续通知流程
-            logger.warning("Dead letter source not found (already moved?): %s", file_path)
+            # 区分源文件缺失和目标目录消失，给出精确日志
+            if not os.path.exists(file_path):
+                logger.warning(
+                    "Dead letter source not found (already moved?): %s", file_path)
+            else:
+                logger.error(
+                    "Dead letter target dir missing: %s", task.dead_letter_dir)
         except Exception as e:
             logger.error("Failed to move to dead letter: %s", e)
 
