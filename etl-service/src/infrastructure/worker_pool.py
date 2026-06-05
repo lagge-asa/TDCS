@@ -188,12 +188,18 @@ class WorkerPool:
                     for tid, cb in self._breakers.items()}
 
     def stop(self) -> None:
-        """发送停止信号并等待所有 worker 线程退出（最多 30s）。"""
+        """发送停止信号并等待 supervisor 和所有 worker 线程退出（最多 30s）。"""
         self._stop.set()
+        # supervisor 线程（如果有）也需等待退出，防止它再创建新 worker
+        import threading
+        for t in threading.enumerate():
+            if t.name == "WorkerSupervisor" and t.is_alive():
+                t.join(timeout=5)
         for w in self._workers:
-            w.join(timeout=30)
             if w.is_alive():
-                logger.warning("Worker thread %s did not exit in 30s", w.name)
+                w.join(timeout=30)
+                if w.is_alive():
+                    logger.warning("Worker thread %s did not exit in 30s", w.name)
 
     def _get_breaker(self, task_id: str) -> CircuitBreaker:
         with self._breaker_lock:

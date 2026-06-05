@@ -115,8 +115,8 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
         def _web_wrapper():
             try:
                 run_server(app, cfg.web.host, cfg.web.port, cfg.web.threads)
-            except Exception as exc:
-                logger.error("Web server crashed: %s", exc)
+            except Exception:
+                logger.exception("Web server crashed")
             finally:
                 # Web 线程退出（含崩溃）时触发主停止信号
                 if _stop_for_web is not None:

@@ -61,11 +61,14 @@ class ConfigManager:
                 raise ConfigValidationError(
                     "Hot-reload validation failed: " + str(errors))
             new_config = self._build(raw)
+            new_task_index = {t.task_id: t for t in new_config.tasks}
+
+            # 先在锁外执行所有 listener，记录失败
             with self._lock:
                 old_config = self._config
-                self._config = new_config
-                self._task_index = {t.task_id: t for t in new_config.tasks}
+                old_task_index = self._task_index
                 listeners = list(self._listeners)
+
             failed = []
             for fn in listeners:
                 try:
@@ -73,12 +76,19 @@ class ConfigManager:
                 except Exception as e:
                     logger.error("Config listener error [%s]: %s", fn.__name__, e)
                     failed.append(fn.__name__)
+
             if failed:
-                logger.warning("Hot-reload: %d listener(s) failed: %s", len(failed), failed)
+                # listener 失败时不更新配置，保持旧状态
+                logger.warning("Hot-reload aborted: %d listener(s) failed: %s", len(failed), failed)
                 raise ConfigValidationError(
-                    f"Config reloaded but {len(failed)} listener(s) failed: {failed}")
-            else:
-                logger.info("Config hot-reloaded successfully")
+                    f"Config reload aborted due to {len(failed)} listener failure(s): {failed}")
+
+            # 全部 listener 成功，原子更新配置
+            with self._lock:
+                self._config = new_config
+                self._task_index = new_task_index
+
+            logger.info("Config hot-reloaded successfully")
         except Exception as e:
             logger.error("Config hot-reload failed, keeping old: %s", e)
             raise  # 让调用方（config_api）能正确返回 500

@@ -1,6 +1,14 @@
 # ETL Service Makefile
 
-.PHONY: db-up db-down test lint fmt install clean
+.PHONY: start stop db-up db-down test lint fmt install clean
+
+start:
+	@echo "Starting TDCS service..."
+	./start.sh
+
+stop:
+	@echo "Stopping TDCS service..."
+	./stop.sh
 
 db-up:
 	docker-compose up -d mysql redis
@@ -18,7 +26,7 @@ test:
 	pytest tests/unit/ -v --cov=src --cov-report=term-missing
 
 test-foundation:
-	pytest tests/unit/test_foundation/ -v --cov=src/core --cov=src/utils --cov=src/infrastructure
+	pytest tests/unit/ test_foundation/ -v --cov=src/core --cov=src/utils --cov=src/infrastructure
 
 lint:
 	flake8 src/ tests/ --max-line-length=100

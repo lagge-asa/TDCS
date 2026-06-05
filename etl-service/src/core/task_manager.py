@@ -144,11 +144,13 @@ class TaskManager:
             if (now.day == 1
                     and month_key != self._last_lifecycle_month
                     and self._lifecycle):
-                try:
-                    for task in self._cm.config.tasks:
-                        if task.retention_months > 0:
+                for task in self._cm.config.tasks:
+                    if task.retention_months > 0:
+                        try:
                             self._lifecycle.run(task)
-                    self._last_lifecycle_month = month_key
-                except Exception as e:
-                    logger.error("Monthly lifecycle error: %s", e)
+                        except Exception as e:
+                            # 单个 task 失败不影响其他 task
+                            logger.error("Monthly lifecycle error for task %s: %s",
+                                         task.task_id, e)
+                self._last_lifecycle_month = month_key
             self._stop.wait(3600)  # 每小时检查一次，stop 时可立即唤醒
