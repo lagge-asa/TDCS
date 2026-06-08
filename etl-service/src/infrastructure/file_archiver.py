@@ -45,7 +45,12 @@ class FileArchiver:
         return dst
 
     def run_compress_job(self, task_config) -> None:
-        """压缩 compress_after_days 天前的归档文件."""
+        """压缩 compress_after_days 天前的归档文件.
+
+        当 compress_after_days <= 0 时永不自动压缩。
+        """
+        if task_config.compress_after_days <= 0:
+            return
         archive_dir = task_config.archive_dir
         if not archive_dir or not os.path.isdir(archive_dir):
             return
@@ -62,7 +67,12 @@ class FileArchiver:
                 self._compress(fpath)
 
     def run_cleanup_job(self, task_config) -> None:
-        """删除 cleanup_after_days 天前的归档文件."""
+        """删除 cleanup_after_days 天前的归档文件.
+
+        当 cleanup_after_days <= 0 时永不自动删除。
+        """
+        if task_config.cleanup_after_days <= 0:
+            return
         archive_dir = task_config.archive_dir
         if not archive_dir or not os.path.isdir(archive_dir):
             return

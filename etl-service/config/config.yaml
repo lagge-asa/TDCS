@@ -97,8 +97,9 @@ tasks:
       mode: "keep"
       archive_dir: "D:\\data\\archive"
       retain_structure: true
-      compress_after_days: 7
-      cleanup_after_days: 90
+      # 设为 0 表示永不自动压缩/删除归档文件，数据永久保留
+      compress_after_days: 0
+      cleanup_after_days: 0
     schedule:
       poll_interval: 60
       poll_incremental: true
