@@ -20,6 +20,8 @@ DEFAULT_CLAIM_TIMEOUT_SECONDS = 600  # 10 分钟
 
 
 class StateTracker:
+    """原子状态机：基于 INSERT ... ON DUPLICATE KEY UPDATE 消除竞态的文件处理状态跟踪。"""
+
     def __init__(self, db, instance_id: str,
                  claim_timeout: int = DEFAULT_CLAIM_TIMEOUT_SECONDS):
         self.db = db

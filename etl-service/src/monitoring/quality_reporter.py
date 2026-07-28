@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class QualityReport:
+    """数据质量报告实体：包含行数、错误率、空值率及综合评分。"""
+
     total_rows: int
     valid_rows: int
     error_rows: int
@@ -34,6 +36,8 @@ class QualityReport:
 
 
 class QualityReporter:
+    """数据质量计算与持久化：计算评分并写入 data_quality_log。"""
+
     def __init__(self, db):
         self.db = db
 

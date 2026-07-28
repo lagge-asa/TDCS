@@ -9,13 +9,69 @@
     2. 在 Alerter.__init__ 的 _CHANNEL_TYPES 注册
 """
 
+import hashlib
+import hmac
 import json
 import logging
+import os
+import re
 import urllib.request
 from abc import ABC, abstractmethod
 from typing import List
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+# 允许的 webhook 域名白名单（仅允许 HTTPS 的外部域名，阻断内网/云元数据地址）
+_ALLOWED_WEBHOOK_DOMAINS = re.compile(
+    r'^(qyapi\.weixin\.qq\.com|oapi\.dingtalk\.com|'
+    r'hooks\.slack\.com|discord\.com/api/webhooks)$'
+)
+# 内网 / 云元数据服务地址黑名单
+_BLOCKED_HOSTS = frozenset({
+    '127.0.0.1', 'localhost', '0.0.0.0', '::1',
+    '169.254.169.254',  # AWS / GCP / Azure 元数据
+    'metadata.google.internal',
+})
+_BLOCKED_NETS = (
+    (b'\x0a\x00\x00\x00', b'\x0a\xff\xff\xff'),       # 10.0.0.0/8
+    (b'\xac\x10\x00\x00', b'\xac\x1f\xff\xff'),       # 172.16.0.0/12
+    (b'\xc0\xa8\x00\x00', b'\xc0\xa8\xff\xff'),       # 192.168.0.0/16
+)
+
+
+def _validate_webhook_url(url: str) -> None:
+    """校验 webhook URL：仅允许 HTTPS 已知域名，拒绝内网/元数据地址."""
+    parsed = urlparse(url)
+    if parsed.scheme != 'https':
+        raise ValueError(f"Webhook URL must use HTTPS: {url}")
+    hostname = parsed.hostname or ''
+    if hostname in _BLOCKED_HOSTS:
+        raise ValueError(f"Webhook URL blocked (internal): {url}")
+    # 检查 IP 是否属于内网段
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(hostname)
+        ip_bytes = ip.packed
+        for lo, hi in _BLOCKED_NETS:
+            if lo <= ip_bytes <= hi:
+                raise ValueError(f"Webhook URL blocked (private IP): {url}")
+    except ValueError:
+        pass  # 不是 IP 地址，继续域名白名单检查
+    if not _ALLOWED_WEBHOOK_DOMAINS.search(hostname):
+        logger.warning("Webhook domain not in allowlist: %s", hostname)
+
+
+def _sign_payload(payload: bytes, secret: str) -> str:
+    """HMAC-SHA256 签名，用于 webhook 接收端验证消息真伪."""
+    return hmac.new(
+        secret.encode(), payload, hashlib.sha256
+    ).hexdigest()
+
+
+def _sanitize_path(file_path: str) -> str:
+    """脱敏绝对路径：仅保留文件名，避免泄露服务器目录结构."""
+    return os.path.basename(file_path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -31,50 +87,28 @@ class AlertChannel(ABC):
 
 
 class WebhookChannel(AlertChannel):
-    """通用 Webhook 通道（POST JSON）."""
+    """Webhook 通道，支持通用 JSON 和企业微信两种 payload 格式."""
 
     def __init__(self, cfg):
+        _validate_webhook_url(cfg.webhook)
         self._url = cfg.webhook
+        self._secret: str = getattr(cfg, 'secret', '')
+        self._is_wecom: bool = getattr(cfg, 'type', '') == 'wecom'
 
     def send(self, title: str, message: str, level: str = "warning") -> None:
-        payload = json.dumps({
-            "title": title,
-            "message": message,
-            "level": level,
-        }).encode()
+        content = f"[ETL {level.upper()}] {title}\n{message}"
+        payload = json.dumps(
+            {"msgtype": "text", "text": {"content": content}}
+            if self._is_wecom else
+            {"title": title, "message": message, "level": level}
+        ).encode()
+        headers = {"Content-Type": "application/json"}
+        if self._secret:
+            headers["X-Signature"] = _sign_payload(payload, self._secret)
         req = urllib.request.Request(
             self._url,
             data=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        urllib.request.urlopen(req, timeout=10)
-
-
-class WeCom(AlertChannel):
-    """企业微信群机器人通道（预留，待实现）.
-
-    配置示例:
-        channels:
-          - type: wecom
-            webhook: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
-
-    企微文档: https://developer.work.weixin.qq.com/document/path/91770
-    """
-
-    def __init__(self, cfg):
-        self._url = cfg.webhook
-
-    def send(self, title: str, message: str, level: str = "warning") -> None:
-        # TODO: 实现企业微信消息卡片格式
-        # 当前降级为纯文本
-        payload = json.dumps({
-            "msgtype": "text",
-            "text": {"content": f"[ETL {level.upper()}] {title}\n{message}"},
-        }).encode()
-        req = urllib.request.Request(
-            self._url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
         )
         urllib.request.urlopen(req, timeout=10)
 
@@ -85,9 +119,7 @@ class WeCom(AlertChannel):
 
 _CHANNEL_TYPES = {
     "webhook": WebhookChannel,
-    "wecom":   WeCom,
-    # "dingtalk": DingTalkChannel,  # 如需接入钉钉，在此注册
-    # "email":    EmailChannel,
+    "wecom":   WebhookChannel,  # 企业微信，通过 type 字段自动切换 payload 格式
 }
 
 
@@ -101,7 +133,11 @@ class Alerter:
         for ch in self._cfg.channels:
             cls = _CHANNEL_TYPES.get(ch.type)
             if cls:
-                self._channels.append(cls(ch))
+                try:
+                    self._channels.append(cls(ch))
+                except ValueError as e:
+                    logger.error("Skip invalid alert channel [%s]: %s",
+                                 ch.type, e)
             else:
                 logger.warning("Unknown alert channel type: %s", ch.type)
 
@@ -139,10 +175,10 @@ class Alerter:
 
     def notify_pipeline_failure(self, task_id: str,
                                  file_path: str, error: str) -> None:
-        """Pipeline 致命错误时通知（由 FileProcessor 调用）。"""
+        """Pipeline 致命错误时通知（由 FileProcessor 调用）."""
         self.send_alert(
             f"文件处理失败: {task_id}",
-            f"文件: {file_path}\n错误: {error}",
+            f"文件: {_sanitize_path(file_path)}\n错误: {error}",
             level="error",
         )
 
@@ -150,6 +186,6 @@ class Alerter:
         """文件进入死信目录时通知。"""
         self.send_alert(
             f"文件进入死信: {task_id}",
-            f"已超过最大重试次数，文件移入死信目录\n{file_path}",
+            f"已超过最大重试次数，文件移入死信目录\n{_sanitize_path(file_path)}",
             level="error",
         )

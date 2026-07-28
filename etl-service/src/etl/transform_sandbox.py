@@ -16,6 +16,7 @@ import subprocess
 import sys
 import logging
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from ..core.exceptions import FatalError, RetryableError, SandboxError
 
@@ -60,13 +61,15 @@ def _make_sandbox_env(custom_etl_dir: str) -> dict:
 
 
 class TransformSandbox:
-    def __init__(self, custom_etl_dir: str):
-        self.custom_etl_dir = custom_etl_dir
+    """清洗沙箱 — 子进程隔离执行自定义清洗代码."""
+
+    def __init__(self, custom_etl_dir: str) -> None:
+        self.custom_etl_dir: str = custom_etl_dir
         self._env = _make_sandbox_env(custom_etl_dir)
 
-    def transform_batch(self, rows: list, module: str, func: str,
+    def transform_batch(self, rows: List[dict], module: str, func: str,
                         timeout: int = 30,
-                        memory_mb: int = 256) -> list:
+                        memory_mb: int = 256) -> List[dict]:
         """在子进程中执行清洗代码.
 
         memory_mb: Windows 下仅声明, 不通过 resource 限制.

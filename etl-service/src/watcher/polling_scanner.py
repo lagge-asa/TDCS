@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class PollingScanner:
+    """增量轮询兜底扫描器：按 mtime 扫描新文件并提交到工作池。"""
+
     def __init__(self, task_config, state_tracker, worker_pool):
         self._cfg = task_config
         self._st = state_tracker

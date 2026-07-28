@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class TaskManager:
+    """多任务生命周期管理器"""
     def __init__(self, config_manager, db, worker_pool,
                  state_tracker, ha_elector, file_archiver,
                  monthly_lifecycle=None):

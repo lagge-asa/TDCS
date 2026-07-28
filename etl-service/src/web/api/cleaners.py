@@ -20,9 +20,10 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Blueprint, Response, current_app, jsonify, request, send_file
+from flask import Blueprint, Response, current_app, request, send_file
 
 from ..auth import require_auth
+from ..response import ok, error
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("cleaners", __name__)
@@ -150,7 +151,7 @@ def list_templates():
     """返回所有可用清洗模板列表（实时，热插拔）。"""
     reg = _get_registry()
     templates = reg.list_templates()
-    return jsonify({
+    return ok({
         "templates": templates,
         "count": len(templates),
         "valid_count": sum(1 for t in templates if t["valid"]),
@@ -166,10 +167,10 @@ def get_template(name: str):
     templates = reg.list_templates()
     info = next((t for t in templates if t["name"] == name), None)
     if not info:
-        return jsonify({"error": f"模板 '{name}' 不存在"}), 404
+        return error("TEMPLATE_NOT_FOUND", f"模板 '{name}' 不存在", status=404)
 
     source = reg.get_source(name) or ""
-    return jsonify({**info, "source": source})
+    return ok({**info, "source": source})
 
 
 @bp.post("/run")
@@ -187,26 +188,26 @@ def run_cleaner():
 
     # ── 参数校验 ──────────────────────────────────────────────────────────
     if "file" not in request.files:
-        return jsonify({"error": "缺少上传文件字段 'file'"}), 400
+        return error("MISSING_FIELD", "缺少上传文件字段 'file'", status=400)
     if "template" not in request.form:
-        return jsonify({"error": "缺少模板名称字段 'template'"}), 400
+        return error("MISSING_FIELD", "缺少模板名称字段 'template'", status=400)
 
     uploaded = request.files["file"]
     template_name = request.form["template"].strip()
     preview_only = request.form.get("preview", "true").lower() != "false"
 
     if not uploaded.filename:
-        return jsonify({"error": "文件名为空"}), 400
+        return error("INVALID_FILE", "文件名为空", status=400)
 
     # 文件大小限制：先检查 content_length 再读入内存，超限直接拒绝
     content_length = request.content_length or 0
     if content_length > _MAX_UPLOAD_MB * 1024 * 1024:
-        return jsonify({"error": f"文件超过 {_MAX_UPLOAD_MB}MB 限制"}), 413
+        return error("FILE_TOO_LARGE", f"文件超过 {_MAX_UPLOAD_MB}MB 限制", status=413)
 
     file_bytes = uploaded.read()
     # 再次检查实际读取大小（content_length 可能不可信或为零）
     if len(file_bytes) > _MAX_UPLOAD_MB * 1024 * 1024:
-        return jsonify({"error": f"文件超过 {_MAX_UPLOAD_MB}MB 限制"}), 413
+        return error("FILE_TOO_LARGE", f"文件超过 {_MAX_UPLOAD_MB}MB 限制", status=413)
 
     # 检测格式
     fname = uploaded.filename.lower()
@@ -222,24 +223,24 @@ def run_cleaner():
             file_bytes = df.to_csv(index=False).encode("utf-8")
             fmt = "csv"
         except Exception as e:
-            return jsonify({"error": f"Excel 解析失败: {e}"}), 400
+            return error("EXCEL_PARSE_ERROR", f"Excel 解析失败: {e}", status=400)
     else:
-        return jsonify({"error": "仅支持 .csv / .xlsx / .xls 格式"}), 400
+        return error("UNSUPPORTED_FORMAT", "仅支持 .csv / .xlsx / .xls 格式", status=400)
 
     # ── 获取模板路径 ───────────────────────────────────────────────────────
     reg = _get_registry()
     script_path = reg.get_path(template_name)
     if script_path is None:
-        return jsonify({"error": f"模板 '{template_name}' 不存在或语法无效"}), 404
+        return error("TEMPLATE_NOT_FOUND", f"模板 '{template_name}' 不存在或语法无效", status=404)
 
     # ── 执行清洗 ──────────────────────────────────────────────────────────
     t0 = time.monotonic()
     try:
         result = _run_cleaner_subprocess(script_path, file_bytes, fmt)
     except TimeoutError as e:
-        return jsonify({"error": str(e)}), 408
+        return error("TIMEOUT", str(e), status=408)
     except RuntimeError as e:
-        return jsonify({"error": str(e)}), 422
+        return error("CLEANER_ERROR", str(e), status=422)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
     rows = result.get("rows", [])
@@ -265,7 +266,7 @@ def run_cleaner():
 
     preview = rows[:50] if preview_only else rows
 
-    return jsonify({
+    return ok({
         "template": template_name,
         "original_rows": original,
         "cleaned_rows": cleaned,
@@ -287,7 +288,7 @@ def download_result(token: str):
         # 统一判断：不存在或已过期
         if not entry or time.time() > entry[2]:
             _download_store.pop(token, None)
-            return jsonify({"error": "下载令牌不存在或已过期（30分钟有效）"}), 404
+            return error("TOKEN_EXPIRED", "下载令牌不存在或已过期（30分钟有效）", status=404)
         # 一次性消费：取走后立即删除，防止 token 泄露后被重放
         csv_bytes, filename, _ = _download_store.pop(token)
 
@@ -312,7 +313,7 @@ def validate_cleaner(name: str):
         reg = _get_registry()
         source = reg.get_source(name)
         if source is None:
-            return jsonify({"valid": False, "message": f"模板 '{name}' 不存在"}), 404
+            return error("TEMPLATE_NOT_FOUND", f"模板 '{name}' 不存在", status=404)
         code = source
 
     import ast as _ast
@@ -323,7 +324,7 @@ def validate_cleaner(name: str):
             for node in _ast.walk(tree)
         )
         if not has_func:
-            return jsonify({"valid": False, "message": "未找到 def clean_data(df) 函数"})
-        return jsonify({"valid": True, "message": "语法检查通过"})
+            return ok({"valid": False, "message": "未找到 def clean_data(df) 函数"})
+        return ok({"valid": True, "message": "语法检查通过"})
     except SyntaxError as e:
-        return jsonify({"valid": False, "message": f"语法错误: {e}"})
+        return ok({"valid": False, "message": f"语法错误: {e}"})

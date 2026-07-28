@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class FileArchiver:
+    """文件归档器：跨分区安全移动、压缩与过期清理。"""
+
     def __init__(self, state_tracker=None):
         self._st = state_tracker
 

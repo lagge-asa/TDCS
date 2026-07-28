@@ -7,10 +7,12 @@ POST /api/v1/files/<id>/retry    手动重试
 GET  /api/v1/files/summary       各状态汇总统计（用于仪表盘）
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+from ..response import ok, error, paginated
+from ..pagination import get_pagination
 
 bp = Blueprint("files", __name__)
 
@@ -44,12 +46,11 @@ def _file_row_to_dict(r, full=False) -> dict:
 def list_files():
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"files": [], "total": 0})
+        return ok({"files": [], "total": 0})
 
     status = request.args.get("status")
     task_id = request.args.get("task_id")
-    page = max(1, int(request.args.get("page", 1)))
-    page_size = min(200, max(1, int(request.args.get("page_size", 50))))
+    page, page_size = get_pagination()
     offset = (page - 1) * page_size
 
     conditions = []
@@ -76,12 +77,10 @@ def list_files():
             LIMIT :limit OFFSET :offset
         """), params).mappings().all()
 
-    return jsonify({
-        "files": [_file_row_to_dict(r) for r in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return paginated(
+        [_file_row_to_dict(r) for r in rows],
+        page, page_size, total,
+    )
 
 
 @bp.get("/summary")
@@ -90,7 +89,7 @@ def files_summary():
     """各状态数量汇总，用于仪表盘 KPI."""
     db = current_app.config.get("db")
     if not db:
-        return jsonify({})
+        return ok({})
 
     with db.slave_conn() as conn:
         rows = conn.execute(text("""
@@ -108,7 +107,7 @@ def files_summary():
 
     summary = {r["status"]: {"count": int(r["cnt"]), "rows": int(r["row_sum"] or 0)} for r in rows}
     summary["_total_success_rows"] = int(total_rows)
-    return jsonify(summary)
+    return ok(summary)
 
 
 @bp.get("/<int:file_id>")
@@ -117,7 +116,7 @@ def get_file(file_id: int):
     """单文件完整详情，含 error_message."""
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"error": "DB unavailable"}), 503
+        return error("DB_UNAVAILABLE", "DB unavailable", status=503)
 
     with db.slave_conn() as conn:
         row = conn.execute(text("""
@@ -130,8 +129,8 @@ def get_file(file_id: int):
         """), {"id": file_id}).mappings().first()
 
     if not row:
-        return jsonify({"error": "文件记录不存在"}), 404
-    return jsonify(_file_row_to_dict(row, full=True))
+        return error("FILE_NOT_FOUND", "文件记录不存在", status=404)
+    return ok(_file_row_to_dict(row, full=True))
 
 
 @bp.post("/<int:file_id>/retry")
@@ -139,7 +138,7 @@ def get_file(file_id: int):
 def retry_file(file_id: int):
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"error": "DB unavailable"}), 503
+        return error("DB_UNAVAILABLE", "DB unavailable", status=503)
 
     with db.master_conn() as conn:
         result = conn.execute(text("""
@@ -152,5 +151,5 @@ def retry_file(file_id: int):
         conn.commit()
 
     if result.rowcount == 0:
-        return jsonify({"error": "文件记录不存在"}), 404
-    return jsonify({"status": "queued", "file_id": file_id})
+        return error("FILE_NOT_FOUND", "文件记录不存在", status=404)
+    return ok({"status": "queued", "file_id": file_id})

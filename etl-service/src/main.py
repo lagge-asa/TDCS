@@ -25,7 +25,6 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     from .infrastructure.worker_pool import WorkerPool
     from .infrastructure.ha_elector import HAElector
     from .infrastructure.file_archiver import FileArchiver
-    from .infrastructure.cache import CacheManager
     from .etl.table_router import TableRouter
     from .etl.loader import Loader
     from .etl.encryption import Encryption
@@ -53,11 +52,6 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
 
     # 3. 基础设施
     db = DatabaseManager(cfg)
-    cache = CacheManager(
-        maxsize=cfg.cache.local.maxsize,
-        ttl=cfg.cache.local.ttl,
-    )
-    # 注: cfg.cache.redis 已配置但当前未启用，TableRouter 只使用本地 CacheManager
     st = StateTracker(db, cfg.instance_id)
     archiver = FileArchiver(st)
     enc = Encryption(cfg.encryption)
@@ -71,7 +65,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     cleaner_registry = CleanerRegistry("clean_templates")
     cleaner_registry.start_watching()
 
-    router = TableRouter(db, cache)
+    router = TableRouter(db)
     loader = Loader(db)
 
     def make_pipeline(task_id: str) -> ETLPipeline:

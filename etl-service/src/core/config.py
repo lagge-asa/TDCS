@@ -153,7 +153,20 @@ class ConfigManager:
             db_master_connect_timeout=db["master"].get("connect_timeout", 10),
             db_slave_dsns=tuple(
                 self._build_dsn(s) for s in db.get("slaves", [])),
-            cache=self._build_cache(cache),
+            cache=CacheConfig(
+                local=CacheLocalConfig(
+                    enabled=cache.get("local", {}).get("enabled", True),
+                    maxsize=cache.get("local", {}).get("maxsize", 1000),
+                    ttl=cache.get("local", {}).get("ttl", 300),
+                ),
+                redis=CacheRedisConfig(
+                    enabled=cache.get("redis", {}).get("enabled", False),
+                    host=cache.get("redis", {}).get("host", "127.0.0.1"),
+                    port=cache.get("redis", {}).get("port", 6379),
+                    password=cache.get("redis", {}).get("password", ""),
+                    db=cache.get("redis", {}).get("db", 0),
+                ),
+            ),
             worker_threads=cc.get("worker_threads", 4),
             queue_maxsize=cc.get("queue_maxsize", 500),
             task_timeout=cc.get("task_timeout", 300),
@@ -172,7 +185,7 @@ class ConfigManager:
                 enabled=web.get("enabled", True),
                 host=web.get("host", "127.0.0.1"),
                 port=web.get("port", 8080),
-                secret_key=web.get("secret_key", ""),
+                secret_key=web["secret_key"],  # 必填，由 Schema 校验长度 >= 16
                 token_expire_hours=web.get("token_expire_hours", 8),
                 rate_limit=web.get("rate_limit", "200 per minute"),
                 server=web.get("server", "waitress"),
@@ -190,24 +203,6 @@ class ConfigManager:
             + "@" + db["host"] + ":" + str(db.get("port", 3306))
             + "/" + db["database"]
             + "?charset=utf8mb4"
-        )
-
-    def _build_cache(self, raw: dict) -> CacheConfig:
-        lr = raw.get("local", {})
-        rr = raw.get("redis", {})
-        return CacheConfig(
-            local=CacheLocalConfig(
-                enabled=lr.get("enabled", True),
-                maxsize=lr.get("maxsize", 1000),
-                ttl=lr.get("ttl", 300),
-            ),
-            redis=CacheRedisConfig(
-                enabled=rr.get("enabled", False),
-                host=rr.get("host", "127.0.0.1"),
-                port=rr.get("port", 6379),
-                password=rr.get("password", ""),
-                db=rr.get("db", 0),
-            ),
         )
 
     def _build_monitoring(self, raw: dict) -> MonitoringConfig:

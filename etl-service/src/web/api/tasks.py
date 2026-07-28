@@ -11,10 +11,12 @@ POST /api/v1/tasks/<task_id>/disable 禁用（含停止 watcher）
 GET  /api/v1/tasks/<task_id>/stats   文件处理统计
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+from ..response import ok, error
+from ..pagination import get_pagination
 
 bp = Blueprint("tasks", __name__)
 
@@ -23,7 +25,7 @@ def _get_tm_or_404(task_id):
     tm = current_app.config.get("task_manager")
     cm = current_app.config.get("config_manager")
     if not cm or not cm.get_task(task_id):
-        return None, (jsonify({"error": f"任务 '{task_id}' 不存在"}), 404)
+        return None, error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
     return tm, None
 
 
@@ -90,7 +92,7 @@ def list_tasks():
     cm = current_app.config["config_manager"]
     db = current_app.config.get("db")
     tasks = [_task_to_dict(t, db) for t in cm.config.tasks]
-    return jsonify({"tasks": tasks, "total": len(tasks)})
+    return ok({"tasks": tasks, "total": len(tasks)})
 
 
 @bp.get("/<task_id>")
@@ -99,9 +101,9 @@ def get_task(task_id: str):
     cm = current_app.config.get("config_manager")
     task = cm.get_task(task_id) if cm else None
     if not task:
-        return jsonify({"error": f"任务 '{task_id}' 不存在"}), 404
+        return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
     db = current_app.config.get("db")
-    return jsonify(_task_to_dict(task, db))
+    return ok(_task_to_dict(task, db))
 
 
 @bp.get("/<task_id>/stats")
@@ -110,11 +112,11 @@ def task_stats(task_id: str):
     """任务文件处理统计（按日期分组）."""
     cm = current_app.config.get("config_manager")
     if not cm or not cm.get_task(task_id):
-        return jsonify({"error": f"任务 '{task_id}' 不存在"}), 404
+        return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
 
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"task_id": task_id, "daily": []})
+        return ok({"task_id": task_id, "daily": []})
 
     days = min(90, max(1, int(request.args.get("days", 7))))
     with db.slave_conn() as conn:
@@ -133,7 +135,7 @@ def task_stats(task_id: str):
             ORDER BY day ASC
         """), {"tid": task_id, "days": days}).mappings().all()
 
-    return jsonify({
+    return ok({
         "task_id": task_id,
         "days": days,
         "daily": [{
@@ -155,7 +157,7 @@ def pause_task(task_id: str):
         return err
     if tm:
         tm.pause_task(task_id)
-    return jsonify({"status": "paused", "task_id": task_id})
+    return ok({"status": "paused", "task_id": task_id})
 
 
 @bp.post("/<task_id>/resume")
@@ -166,7 +168,7 @@ def resume_task(task_id: str):
         return err
     if tm:
         tm.resume_task(task_id)
-    return jsonify({"status": "resumed", "task_id": task_id})
+    return ok({"status": "resumed", "task_id": task_id})
 
 
 @bp.post("/<task_id>/trigger")
@@ -177,7 +179,7 @@ def trigger_task(task_id: str):
         return err
     if tm:
         tm.trigger_task(task_id)
-    return jsonify({"status": "triggered", "task_id": task_id})
+    return ok({"status": "triggered", "task_id": task_id})
 
 
 @bp.post("/<task_id>/enable")
@@ -187,10 +189,10 @@ def enable_task(task_id: str):
     cm = current_app.config.get("config_manager")
     tm = current_app.config.get("task_manager")
     if not cm or not cm.get_task(task_id):
-        return jsonify({"error": f"任务 '{task_id}' 不存在"}), 404
+        return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
     if tm:
         tm.start_task(task_id)
-    return jsonify({"status": "enabled", "task_id": task_id})
+    return ok({"status": "enabled", "task_id": task_id})
 
 
 @bp.post("/<task_id>/disable")
@@ -200,7 +202,7 @@ def disable_task(task_id: str):
     cm = current_app.config.get("config_manager")
     tm = current_app.config.get("task_manager")
     if not cm or not cm.get_task(task_id):
-        return jsonify({"error": f"任务 '{task_id}' 不存在"}), 404
+        return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
     if tm:
         tm.stop_task(task_id)
-    return jsonify({"status": "disabled", "task_id": task_id})
+    return ok({"status": "disabled", "task_id": task_id})

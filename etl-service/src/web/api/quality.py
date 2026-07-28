@@ -6,10 +6,12 @@ GET /api/v1/quality/<task_id>/latest 最新一条质量报告
 GET /api/v1/quality/<task_id>/trend  近 N 天的质量趋势（用于折线图）
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+from ..response import ok, error, paginated
+from ..pagination import get_pagination
 
 bp = Blueprint("quality", __name__)
 
@@ -20,10 +22,9 @@ def get_quality(task_id: str):
     """分页查询质量报告."""
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"task_id": task_id, "reports": [], "total": 0})
+        return ok({"task_id": task_id, "reports": [], "total": 0})
 
-    page = max(1, int(request.args.get("page", 1)))
-    page_size = min(100, max(1, int(request.args.get("page_size", 20))))
+    page, page_size = get_pagination()
     offset = (page - 1) * page_size
 
     with db.slave_conn() as conn:
@@ -43,13 +44,7 @@ def get_quality(task_id: str):
         ).mappings().all()
 
     reports = [_row_to_dict(r) for r in rows]
-    return jsonify({
-        "task_id": task_id,
-        "reports": reports,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    return paginated(reports, page, page_size, total)
 
 
 @bp.get("/<task_id>/latest")
@@ -58,7 +53,7 @@ def get_latest_quality(task_id: str):
     """获取最新一条质量报告."""
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"error": "DB unavailable"}), 503
+        return error("DB_UNAVAILABLE", "DB unavailable", status=503)
 
     with db.slave_conn() as conn:
         row = conn.execute(text("""
@@ -72,8 +67,8 @@ def get_latest_quality(task_id: str):
         """), {"tid": task_id}).mappings().first()
 
     if not row:
-        return jsonify({"task_id": task_id, "report": None})
-    return jsonify({"task_id": task_id, "report": _row_to_dict(row)})
+        return ok({"task_id": task_id, "report": None})
+    return ok({"task_id": task_id, "report": _row_to_dict(row)})
 
 
 @bp.get("/<task_id>/trend")
@@ -83,7 +78,7 @@ def get_quality_trend(task_id: str):
     days = min(90, max(1, int(request.args.get("days", 30))))
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"task_id": task_id, "trend": []})
+        return ok({"task_id": task_id, "trend": []})
 
     with db.slave_conn() as conn:
         rows = conn.execute(text("""
@@ -110,7 +105,7 @@ def get_quality_trend(task_id: str):
         "error_rows": r["error_rows"],
     } for r in rows]
 
-    return jsonify({"task_id": task_id, "days": days, "trend": trend})
+    return ok({"task_id": task_id, "days": days, "trend": trend})
 
 
 def _row_to_dict(row) -> dict:

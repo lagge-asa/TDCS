@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class FileProcessor:
+    """文件处理器"""
     def __init__(self, config_manager, state_tracker, pipeline_factory,
                  quality_reporter, file_archiver,
                  alerter=None, task_manager=None):

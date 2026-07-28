@@ -41,13 +41,3 @@ def get_trace_id() -> str:
 def get_task_id() -> str:
     """获取当前 task_id。"""
     return _task_id.get()
-
-
-def set_trace_id(trace_id: str) -> None:
-    """显式设置 trace_id（用于跨线程传递场景）。"""
-    _trace_id.set(trace_id)
-
-
-def set_task_id(task_id: str) -> None:
-    """显式设置 task_id（用于跨线程传递场景）。"""
-    _task_id.set(task_id)

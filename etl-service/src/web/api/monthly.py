@@ -5,10 +5,11 @@ GET  /api/v1/monthly/           查询月表注册表
 POST /api/v1/monthly/run        手动触发月表生命周期检查（admin）
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+from ..response import ok, error
 
 bp = Blueprint("monthly", __name__)
 
@@ -18,7 +19,7 @@ bp = Blueprint("monthly", __name__)
 def list_monthly_tables():
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"tables": [], "total": 0})
+        return ok({"tables": [], "total": 0})
 
     task_id = request.args.get("task_id")
     params = {}
@@ -36,7 +37,7 @@ def list_monthly_tables():
             LIMIT 200
         """), params).mappings().all()
 
-    return jsonify({
+    return ok({
         "tables": [{
             "id": r["id"],
             "task_id": r["task_id"],
@@ -58,7 +59,7 @@ def run_lifecycle():
     cm = current_app.config.get("config_manager")
     db = current_app.config.get("db")
     if not cm or not db:
-        return jsonify({"error": "服务未完全初始化"}), 503
+        return error("SERVICE_NOT_READY", "服务未完全初始化", status=503)
 
     data = request.get_json() or {}
     task_id = data.get("task_id")  # 可选，不填则检查所有
@@ -73,6 +74,6 @@ def run_lifecycle():
             if task.retention_months > 0:
                 lifecycle.run(task)
                 ran.append(task.task_id)
-        return jsonify({"status": "ok", "ran_for_tasks": ran})
+        return ok({"status": "ok", "ran_for_tasks": ran})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return error("LIFECYCLE_ERROR", str(e), status=500)

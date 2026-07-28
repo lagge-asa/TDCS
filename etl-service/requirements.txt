@@ -1,9 +1,10 @@
 # Core
 PyYAML==6.0.2
-pydantic==1.10.21
+pydantic>=2.0
 SQLAlchemy==2.0.41
 PyMySQL==1.1.1
 cryptography==44.0.3
+alembic>=1.13
 
 # ETL
 chardet==5.2.0

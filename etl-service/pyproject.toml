@@ -12,12 +12,28 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--tb=short"
+addopts = "--tb=short -p no:warnings"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 [tool.coverage.run]
 source = ["src"]
 omit = ["src/etl/_sandbox_runner.py"]
 
+[tool.coverage.report]
+fail_under = 30
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "def __repr__",
+]
+
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_incomplete_defs = false
+no_implicit_optional = true

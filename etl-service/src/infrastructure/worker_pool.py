@@ -29,12 +29,16 @@ _RESTART_MAX = 3        # 窗口内最大重启次数
 
 
 class CircuitState(Enum):
+    """熔断器三态：CLOSED（正常）→ OPEN（熔断）→ HALF_OPEN（试探恢复）。"""
+
     CLOSED = "CLOSED"
     OPEN = "OPEN"
     HALF_OPEN = "HALF_OPEN"
 
 
 class SubmitResult(Enum):
+    """任务提交结果：QUEUED（入队成功）或各类拒绝原因。"""
+
     QUEUED = "QUEUED"
     REJECTED_CIRCUIT_OPEN = "REJECTED_CIRCUIT_OPEN"
     REJECTED_HA_STANDBY = "REJECTED_HA_STANDBY"
@@ -44,6 +48,8 @@ class SubmitResult(Enum):
 
 @dataclass
 class CircuitBreaker:
+    """per-task 熔断器：失败计数达到阈值后 OPEN，超时后 HALF_OPEN 试探恢复。"""
+
     failure_threshold: int = 5
     recovery_timeout: int = 60
     _state: CircuitState = field(default=CircuitState.CLOSED, init=False)

@@ -16,7 +16,7 @@ import csv
 import os
 import logging
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator, List
 
 from ..core.exceptions import SkipFileError
 
@@ -27,7 +27,7 @@ _MIN_CHARDET_CONFIDENCE = 0.5
 
 
 class StreamingExtractor:
-    def stream(self, file_path: str, task_config) -> Iterator[list]:
+    def stream(self, file_path: str, task_config: Any) -> Iterator[List[dict]]:
         """统一流式接口, 根据文件类型自动选择策略."""
         if not os.path.exists(file_path):
             raise SkipFileError(f"File not found: {file_path}")
@@ -86,7 +86,8 @@ class StreamingExtractor:
 
         return encoding
 
-    def _stream_csv(self, file_path, encoding, batch_size) -> Iterator[list]:
+    def _stream_csv(self, file_path: str, encoding: str,
+                    batch_size: int) -> Iterator[List[dict]]:
         with open(file_path, "r", encoding=encoding,
                   errors="replace", newline="") as f:
             reader = csv.DictReader(f)
@@ -99,8 +100,8 @@ class StreamingExtractor:
             if batch:
                 yield batch
 
-    def _stream_json(self, file_path, batch_size,
-                     json_path: str = "item") -> Iterator[list]:
+    def _stream_json(self, file_path: str, batch_size: int,
+                     json_path: str = "item") -> Iterator[List[dict]]:
         """流式解析 JSON 文件.
 
         json_path: ijson 路径表达式，默认 "item"（顶层数组）。

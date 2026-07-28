@@ -114,21 +114,12 @@ class CleanerRegistry:
     # 公共接口
     # ------------------------------------------------------------------ #
 
-    def list_templates(self) -> List[dict]:
-        """返回所有模板信息列表，按名称排序。"""
+    def list_templates(self, valid_only: bool = False) -> List[dict]:
+        """返回模板信息列表，按名称排序。valid_only=True 时仅返回语法合法的模板。"""
         with self._lock:
-            return sorted(
-                [t.to_dict() for t in self._templates.values()],
-                key=lambda x: x["name"],
-            )
-
-    def list_valid_templates(self) -> List[dict]:
-        """仅返回语法合法（含 clean_data 函数）的模板。"""
-        with self._lock:
-            return sorted(
-                [t.to_dict() for t in self._templates.values() if t.valid],
-                key=lambda x: x["name"],
-            )
+            items = [t.to_dict() for t in self._templates.values()
+                     if not valid_only or t.valid]
+            return sorted(items, key=lambda x: x["name"])
 
     def get_path(self, name: str) -> Optional[Path]:
         """获取模板脚本的绝对路径，不存在或非法返回 None。"""

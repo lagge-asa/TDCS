@@ -18,6 +18,8 @@ try:
     import servicemanager
 
     class ETLService(win32serviceutil.ServiceFramework):
+        """Windows 服务封装：通过 pywin32 将 ETL 流水线注册为系统服务。"""
+
         _svc_name_ = "ETLService"
         _svc_display_name_ = "ETL Folder Monitor Service"
         _svc_description_ = "Monitors folders and processes ETL pipelines"

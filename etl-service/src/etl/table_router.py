@@ -24,13 +24,15 @@ from ..core.exceptions import FatalError
 logger = logging.getLogger(__name__)
 
 TABLE_NAME_RE = re.compile(r'^[a-z][a-z0-9_]*$')
+_TABLE_PLACEHOLDER = re.compile(r'\{\{?TABLE_NAME\}?\}')  # 匹配 {{TABLE_NAME}} 或 {TABLE_NAME}
 _MAX_TABLE_NAME_LEN = 64  # MySQL 表名最大长度
 
 
 class TableRouter:
-    def __init__(self, db, cache=None):
+    """按月分区字段将数据行路由到对应月表，自动建表并注册。"""
+
+    def __init__(self, db):
         self.db = db
-        self._cache = cache
         self._created: set = set()
         # per-table 粒度的锁字典，并发建不同表时不互斥
         self._table_locks: dict = {}
@@ -51,9 +53,6 @@ class TableRouter:
     def ensure_table_exists(self, table_name: str, task_config) -> None:
         """确保月表存在, 不存在则按模板创建并注册."""
         if table_name in self._created:
-            return
-        if self._cache and self._cache.get(f"table:{table_name}"):
-            self._created.add(table_name)
             return
 
         self._validate_table_name(table_name)
@@ -78,8 +77,6 @@ class TableRouter:
                 conn.commit()
 
             self._created.add(table_name)
-            if self._cache:
-                self._cache.set(f"table:{table_name}", True)
 
     # -- internal --
 
@@ -130,8 +127,7 @@ class TableRouter:
                 f"读取建表模板失败: {template_path}: {e}")
 
         # 替换模板中的表名占位符
-        sql = sql.replace("{{TABLE_NAME}}", table_name)
-        sql = sql.replace("{TABLE_NAME}", table_name)
+        sql = _TABLE_PLACEHOLDER.sub(table_name, sql)
         conn.execute(text(sql))
 
     @staticmethod

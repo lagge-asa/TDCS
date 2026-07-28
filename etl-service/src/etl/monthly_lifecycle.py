@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class MonthlyTableLifecycle:
+    """月表生命周期管理：超期归档（ARCHIVED），已归档表允许 DROP。"""
+
     def __init__(self, db):
         self._db = db
 

@@ -4,10 +4,11 @@
 GET /api/v1/dashboard/   一次返回仪表盘所有 KPI 数据
 """
 
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+from ..response import ok
 
 bp = Blueprint("dashboard", __name__)
 
@@ -105,7 +106,7 @@ def get_dashboard():
         except Exception:
             pass
 
-    return jsonify({
+    return ok({
         "tasks": {
             "total": task_count,
             "enabled": enabled_count,

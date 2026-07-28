@@ -7,16 +7,22 @@
 
 import os
 import logging
-from typing import List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class Encryption:
-    def __init__(self, config):
+    """字段加密器 — Fernet 对称加密.
+
+    密钥仅从环境变量读取，不硬编码。
+    支持按任务配置的字段列表选择性加密。
+    """
+
+    def __init__(self, config: Any) -> None:
         """config: AppConfig.encryption"""
-        self._enabled = config.enabled
-        self._fernet = None
+        self._enabled: bool = config.enabled
+        self._fernet: Any = None
         if self._enabled:
             self._fernet = self._load_key(config.key_env)
 
@@ -24,14 +30,14 @@ class Encryption:
     def enabled(self) -> bool:
         return self._enabled
 
-    def encrypt_fields(self, rows: list, task_config) -> list:
+    def encrypt_fields(self, rows: List[dict], task_config: Any) -> List[dict]:
         """加密 task_config 中指定的敏感字段."""
         if not self._enabled or not self._fernet:
             return rows
-        fields = getattr(task_config, 'encrypt_fields', [])
+        fields: List[str] = getattr(task_config, 'encrypt_fields', [])
         if not fields:
             return rows
-        result = []
+        result: List[dict] = []
         for row in rows:
             r = dict(row)
             for f in fields:
@@ -41,11 +47,11 @@ class Encryption:
             result.append(r)
         return result
 
-    def decrypt_fields(self, rows: list, fields: list) -> list:
+    def decrypt_fields(self, rows: List[dict], fields: List[str]) -> List[dict]:
         """解密指定字段 (查询时调用)."""
         if not self._enabled or not self._fernet:
             return rows
-        result = []
+        result: List[dict] = []
         for row in rows:
             r = dict(row)
             for f in fields:
@@ -59,7 +65,7 @@ class Encryption:
         return result
 
     @staticmethod
-    def _load_key(key_env: str):
+    def _load_key(key_env: str) -> Any:
         from cryptography.fernet import Fernet
         key = os.environ.get(key_env)
         if not key:

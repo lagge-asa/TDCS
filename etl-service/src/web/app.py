@@ -2,18 +2,36 @@
 Flask 应用工厂 + waitress 生产服务器
 """
 
+from __future__ import annotations
+
 import logging
-from flask import Flask, jsonify
+from typing import TYPE_CHECKING, Any, Optional
+
+from flask import Flask
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+
+if TYPE_CHECKING:
+    from ..core.config import ConfigManager
+    from ..core.task_manager import TaskManager
+    from ..infrastructure.worker_pool import WorkerPool
+    from ..infrastructure.ha_elector import HAElector
+    from ..monitoring.quality_reporter import QualityReporter
+    from ..etl.encryption import Encryption
+    from ..infrastructure.database import DatabaseManager
+    from ..etl.cleaner_registry import CleanerRegistry
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(config_manager, task_manager=None,
-               worker_pool=None, ha_elector=None,
-               quality_reporter=None, encryption=None, db=None,
-               cleaner_registry=None):
+def create_app(config_manager: ConfigManager,
+               task_manager: Optional[TaskManager] = None,
+               worker_pool: Optional[WorkerPool] = None,
+               ha_elector: Optional[HAElector] = None,
+               quality_reporter: Optional[QualityReporter] = None,
+               encryption: Optional[Encryption] = None,
+               db: Optional[DatabaseManager] = None,
+               cleaner_registry: Optional[CleanerRegistry] = None) -> Flask:
     app = Flask(__name__)
     cfg = config_manager.config
 
@@ -33,6 +51,7 @@ def create_app(config_manager, task_manager=None,
     app.config["task_manager"] = task_manager
     app.config["worker_pool"] = worker_pool
     app.config["ha_elector"] = ha_elector
+    app.config["limiter"] = limiter  # 供 Blueprint 中端点级 rate limit 使用
     app.config["quality_reporter"] = quality_reporter
     app.config["encryption"] = encryption
     app.config["db"] = db
@@ -49,6 +68,7 @@ def create_app(config_manager, task_manager=None,
     from .api.audit import bp as audit_bp
     from .api.dashboard import bp as dashboard_bp
     from .api.monthly import bp as monthly_bp
+    from .swagger import bp as swagger_bp
 
     import os
     from flask import send_from_directory
@@ -74,16 +94,18 @@ def create_app(config_manager, task_manager=None,
     app.register_blueprint(audit_bp, url_prefix="/api/v1/audit-logs")
     app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
     app.register_blueprint(monthly_bp, url_prefix="/api/v1/monthly")
+    app.register_blueprint(swagger_bp)  # /docs + /openapi.json
 
     # 全局错误处理器 — 保证所有未捕获异常返回 JSON 而非 HTML
     @app.errorhandler(Exception)
     def _handle_exception(e):
         import traceback
         from werkzeug.exceptions import HTTPException
+        from .response import error as err_resp
         if isinstance(e, HTTPException):
-            return jsonify({"error": e.description}), e.code
+            return err_resp("HTTP_ERROR", e.description or str(e), status=e.code)
         logger.error("Unhandled exception: %s", traceback.format_exc())
-        return jsonify({"error": "Internal server error"}), 500
+        return err_resp("INTERNAL_ERROR", "Internal server error", status=500)
 
     return app
 

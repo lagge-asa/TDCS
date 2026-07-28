@@ -6,10 +6,11 @@ PUT  /api/v1/config/reload   热重载配置（admin，写审计日志）
 """
 
 import json
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+from ..response import ok, error
 
 bp = Blueprint("config_api", __name__)
 
@@ -19,7 +20,7 @@ bp = Blueprint("config_api", __name__)
 def get_config():
     cm = current_app.config["config_manager"]
     cfg = cm.config
-    return jsonify({
+    return ok({
         "instance_id": cfg.instance_id,
         "log_level": cfg.log_level,
         "worker_threads": cfg.worker_threads,
@@ -67,7 +68,7 @@ def reload_config():
     try:
         cm.reload()
     except Exception as e:
-        return jsonify({"error": f"配置重载失败: {e}"}), 500
+        return error("CONFIG_RELOAD_FAILED", f"配置重载失败: {e}", status=500)
 
     new_cfg = cm.config
     user = getattr(request, "current_user", {})
@@ -121,5 +122,5 @@ def reload_config():
         except Exception:
             pass
 
-    return jsonify({"status": "reloaded",
+    return ok({"status": "reloaded",
                     "instance_id": new_cfg.instance_id})

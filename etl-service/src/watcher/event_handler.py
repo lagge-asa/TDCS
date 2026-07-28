@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class EventHandler(FileSystemEventHandler):
+    """防抖文件事件处理：3s 内重复事件去重 + 文件稳定性检测后触发。"""
+
     def __init__(self, task_config, on_file_ready):
         self._cfg = task_config
         self._on_file_ready = on_file_ready

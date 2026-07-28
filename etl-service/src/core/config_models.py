@@ -52,6 +52,7 @@ class TaskConfig:
 
 @dataclass(frozen=True)
 class HAConfig:
+    """高可用配置"""
     enabled: bool
     heartbeat_interval: int
     failover_timeout: int
@@ -60,6 +61,7 @@ class HAConfig:
 
 @dataclass(frozen=True)
 class WebConfig:
+    """Web 服务配置"""
     enabled: bool
     host: str
     port: int
@@ -72,6 +74,7 @@ class WebConfig:
 
 @dataclass(frozen=True)
 class EncryptionConfig:
+    """加密配置"""
     enabled: bool
     algorithm: str
     key_env: str
@@ -79,6 +82,7 @@ class EncryptionConfig:
 
 @dataclass(frozen=True)
 class CacheLocalConfig:
+    """本地缓存配置"""
     enabled: bool
     maxsize: int
     ttl: int
@@ -86,6 +90,7 @@ class CacheLocalConfig:
 
 @dataclass(frozen=True)
 class CacheRedisConfig:
+    """Redis 缓存配置"""
     enabled: bool
     host: str
     port: int
@@ -95,12 +100,14 @@ class CacheRedisConfig:
 
 @dataclass(frozen=True)
 class CacheConfig:
+    """缓存配置（本地 + Redis）"""
     local: CacheLocalConfig
     redis: CacheRedisConfig
 
 
 @dataclass(frozen=True)
 class AlertingRuleConfig:
+    """告警规则配置"""
     failed_files_threshold: int
     quality_score_min: float
     queue_size_max: int
@@ -108,6 +115,7 @@ class AlertingRuleConfig:
 
 @dataclass(frozen=True)
 class AlertingChannelConfig:
+    """告警通道配置"""
     type: str
     webhook: str
     secret: str
@@ -115,6 +123,7 @@ class AlertingChannelConfig:
 
 @dataclass(frozen=True)
 class AlertingConfig:
+    """告警配置"""
     enabled: bool
     channels: Tuple[AlertingChannelConfig, ...]
     rules: AlertingRuleConfig
@@ -122,12 +131,14 @@ class AlertingConfig:
 
 @dataclass(frozen=True)
 class PrometheusConfig:
+    """Prometheus 监控配置"""
     enabled: bool
     port: int
 
 
 @dataclass(frozen=True)
 class MonitoringConfig:
+    """监控配置（Prometheus + 告警）"""
     prometheus: PrometheusConfig
     alerting: AlertingConfig
 

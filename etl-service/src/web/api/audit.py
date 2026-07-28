@@ -4,10 +4,12 @@
 GET /api/v1/audit-logs/    查询审计日志（admin，分页+过滤）
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
+from ..response import ok, paginated
+from ..pagination import get_pagination
 
 bp = Blueprint("audit", __name__)
 
@@ -17,10 +19,9 @@ bp = Blueprint("audit", __name__)
 def list_audit_logs():
     db = current_app.config.get("db")
     if not db:
-        return jsonify({"logs": [], "total": 0})
+        return ok({"logs": [], "total": 0})
 
-    page = max(1, int(request.args.get("page", 1)))
-    page_size = min(200, max(1, int(request.args.get("page_size", 50))))
+    page, page_size = get_pagination()
     offset = (page - 1) * page_size
 
     username = request.args.get("username", "").strip()
@@ -69,4 +70,4 @@ def list_audit_logs():
         "detail": r["detail"],
     } for r in rows]
 
-    return jsonify({"logs": logs, "total": total, "page": page, "page_size": page_size})
+    return paginated(logs, page, page_size, total)

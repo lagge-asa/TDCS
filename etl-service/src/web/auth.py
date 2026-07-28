@@ -8,13 +8,16 @@ JWT 存 Authorization Header, 天然免疫 CSRF.
 import logging
 from datetime import datetime, timezone, timedelta
 from functools import wraps
+from typing import Any, Callable, TypeVar
 
 import jwt
-from flask import request, jsonify, current_app
+from flask import request, current_app
 
 logger = logging.getLogger(__name__)
 
 ROLE_LEVELS = {"viewer": 1, "operator": 2, "admin": 3}
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def generate_token(user_id: int, username: str,
@@ -34,14 +37,14 @@ def generate_token(user_id: int, username: str,
     )
 
 
-def require_auth(min_role: str = "viewer"):
+def require_auth(min_role: str = "viewer") -> Callable[[F], F]:
     """装饰器: 验证 JWT + 角色权限."""
-    def decorator(fn):
+    def decorator(fn: F) -> F:
         @wraps(fn)
         def wrapper(*args, **kwargs):
             auth = request.headers.get("Authorization", "")
             if not auth.startswith("Bearer "):
-                return jsonify({"error": "Missing token"}), 401
+                return {"success": False, "error": {"code": "MISSING_TOKEN", "message": "Missing token"}}, 401
             token = auth[7:]
             try:
                 payload = jwt.decode(
@@ -50,15 +53,13 @@ def require_auth(min_role: str = "viewer"):
                     algorithms=["HS256"],
                 )
             except jwt.ExpiredSignatureError:
-                return jsonify({"error": "Token expired",
-                                "error_code": "token_expired"}), 401
+                return {"success": False, "error": {"code": "TOKEN_EXPIRED", "message": "Token expired"}}, 401
             except jwt.InvalidTokenError:
-                return jsonify({"error": "Invalid token",
-                                "error_code": "token_invalid"}), 401
+                return {"success": False, "error": {"code": "TOKEN_INVALID", "message": "Invalid token"}}, 401
 
             user_role = payload.get("role", "viewer")
             if ROLE_LEVELS.get(user_role, 0) < ROLE_LEVELS.get(min_role, 0):
-                return jsonify({"error": "Insufficient permissions"}), 403
+                return {"success": False, "error": {"code": "FORBIDDEN", "message": "Insufficient permissions"}}, 403
 
             request.current_user = payload
             return fn(*args, **kwargs)

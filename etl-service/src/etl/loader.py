@@ -14,6 +14,7 @@
 """
 
 import logging
+from typing import Any, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,12 @@ def _escape_column(name: str) -> str:
 
 
 class Loader:
-    def __init__(self, db):
+    """批量加载器 — INSERT IGNORE 幂等写入 + ON DUPLICATE KEY UPDATE."""
+
+    def __init__(self, db: Any) -> None:
         self.db = db
 
-    def load_batch(self, table_name: str, rows: list) -> int:
+    def load_batch(self, table_name: str, rows: List[dict]) -> int:
         """批量写入一批行到指定表.
 
         使用 INSERT IGNORE 保证幂等性.
@@ -43,7 +46,7 @@ class Loader:
         col_list = ", ".join(_escape_column(c) for c in columns)
         placeholders = ", ".join("%s" for _ in columns)
         sql = (
-            f"INSERT IGNORE INTO `{table_name}` "
+            f"INSERT IGNORE INTO {_escape_column(table_name)} "
             f"({col_list}) VALUES ({placeholders})"
         )
         written = self._execute_batch(sql, data)
@@ -56,8 +59,8 @@ class Loader:
             logger.debug("Loaded %d rows into %s", written, table_name)
         return written
 
-    def load_batch_upsert(self, table_name: str, rows: list,
-                          update_cols: list) -> int:
+    def load_batch_upsert(self, table_name: str, rows: List[dict],
+                          update_cols: List[str]) -> int:
         """ON DUPLICATE KEY UPDATE 版本 (用于需要更新的场景).
 
         返回实际 rowcount（INSERT=1，UPDATE=2，无变化=0，MySQL 累加）。
@@ -73,7 +76,7 @@ class Loader:
             for c in update_cols
         )
         sql = (
-            f"INSERT INTO `{table_name}` ({col_list}) "
+            f"INSERT INTO {_escape_column(table_name)} ({col_list}) "
             f"VALUES ({placeholders}) "
             f"ON DUPLICATE KEY UPDATE {updates}"
         )
@@ -82,7 +85,7 @@ class Loader:
     # -- internal --
 
     @staticmethod
-    def _prepare_rows(rows: list) -> tuple:
+    def _prepare_rows(rows: List[dict]) -> Tuple[List[str], list]:
         """从行列表推断列名并转为元组列表.
 
         取所有行键的并集（而非仅首行），保证字段不齐时不静默截断。
@@ -100,7 +103,7 @@ class Loader:
         data = [tuple(row.get(c) for c in columns) for row in rows]
         return columns, data
 
-    def _execute_batch(self, sql: str, data: list) -> int:
+    def _execute_batch(self, sql: str, data: List[tuple]) -> int:
         """通过 PyMySQL cursor 执行批量写入，按 _CHUNK_SIZE 分片.
 
         使用位置占位符 %s 避免列名中的 : 和 . 被 SQLAlchemy 解析为绑定参数。

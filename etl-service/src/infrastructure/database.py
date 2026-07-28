@@ -18,10 +18,14 @@ import random
 import time
 import threading
 from contextlib import contextmanager
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.pool import QueuePool
+
+if TYPE_CHECKING:
+    from ..core.config_models import AppConfig
 
 from ..core.exceptions import RetryableError
 
@@ -82,7 +86,7 @@ class _ManagedConn:
 class DatabaseManager:
     """连接池管理器, 支持读写分离."""
 
-    def __init__(self, config):
+    def __init__(self, config: "AppConfig") -> None:
         self._master = self._create_engine(
             config.db_master_dsn,
             pool_size=config.db_master_pool_size,
@@ -103,7 +107,7 @@ class DatabaseManager:
                     len(self._slaves))
 
     @contextmanager
-    def master_conn(self):
+    def master_conn(self) -> Iterator["_ManagedConn"]:
         """获取主库连接 (写操作)."""
         with self._master.connect() as conn:
             try:
@@ -116,7 +120,7 @@ class DatabaseManager:
                     pass
                 raise exc
 
-    def slave_conn(self):
+    def slave_conn(self) -> "_ManagedConn":
         """获取从库连接 (读操作). 无从库或健康从库时降级到主库.
 
         返回上下文管理器对象，支持 with 语法。内部不依赖 @contextmanager
@@ -192,7 +196,7 @@ class DatabaseManager:
     def _create_engine(dsn: str, pool_size: int = 5,
                         pool_timeout: int = 30,
                         pool_recycle: int = 3600,
-                        connect_timeout: int = 10):
+                        connect_timeout: int = 10) -> Engine:
         return create_engine(
             dsn,
             poolclass=QueuePool,

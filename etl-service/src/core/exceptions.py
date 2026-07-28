@@ -10,8 +10,6 @@ ETL 服务异常分类体系
 - SandboxError：清洗代码执行失败（语法错误/超时/非法返回值）
 """
 
-# 重试退避（秒）：retry_count → 等待秒数
-RETRY_BACKOFF = {1: 5, 2: 30, 3: 120}
 
 
 class ETLError(Exception):

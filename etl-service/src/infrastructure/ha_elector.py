@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class HAElector:
+    """HA Leader 选举器：乐观锁心跳 + 降级模式（standalone/pause）。"""
+
     def __init__(self, db, instance_id: str, config,
                  on_become_active=None, on_become_standby=None):
         """

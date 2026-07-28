@@ -14,7 +14,7 @@ MINIMAL_CONFIG = {
             "database": "etl_db",
         }
     },
-    "web": {"host": "127.0.0.1", "port": 8080, "secret_key": "test_secret"},
+    "web": {"host": "127.0.0.1", "port": 8080, "secret_key": "test_secret_key_16chars"},
     "tasks": [{
         "task_id": "test_task",
         "name": "Test Task",
