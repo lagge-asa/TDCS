@@ -25,8 +25,6 @@ install:
 test:
 	pytest tests/unit/ -v --cov=src --cov-report=term-missing
 
-test-foundation:
-	pytest tests/unit/ test_foundation/ -v --cov=src/core --cov=src/utils --cov=src/infrastructure
 
 lint:
 	flake8 src/ tests/ --max-line-length=100

@@ -5,8 +5,6 @@ Swagger UI — 交互式 API 文档 (/docs)
 """
 
 from flask import Blueprint, jsonify, send_file
-import json
-import os
 
 bp = Blueprint("swagger", __name__)
 
@@ -251,7 +249,7 @@ def swagger_ui():
 <head>
   <meta charset="UTF-8">
   <title>TDCS API 文档 — Swagger UI</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css">
   <style>
     html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
     *, *:before, *:after { box-sizing: inherit; }
@@ -272,13 +270,13 @@ def swagger_ui():
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js" crossorigin></script>
   <script>
     SwaggerUIBundle({
       url: "/openapi.json",
       dom_id: "#swagger-ui",
       deepLinking: true,
-      presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
       layout: "StandaloneLayout",
       defaultModelsExpandDepth: -1,
       docExpansion: "list",

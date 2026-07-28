@@ -9,7 +9,6 @@
 优化:
 - _execute_batch 按 CHUNK_SIZE 分片，避免超 max_allowed_packet
 - _prepare_rows 取所有行键并集，缺失键填 None，不因首行字段不足而截断
-- load_batch_upsert 返回实际 rowcount（与 load_batch 语义一致）
 - load_batch 记录 ignored 行数差（写入前后 rowcount 对比）
 """
 
@@ -58,29 +57,6 @@ class Loader:
         else:
             logger.debug("Loaded %d rows into %s", written, table_name)
         return written
-
-    def load_batch_upsert(self, table_name: str, rows: List[dict],
-                          update_cols: List[str]) -> int:
-        """ON DUPLICATE KEY UPDATE 版本 (用于需要更新的场景).
-
-        返回实际 rowcount（INSERT=1，UPDATE=2，无变化=0，MySQL 累加）。
-        """
-        if not rows:
-            return 0
-
-        columns, data = self._prepare_rows(rows)
-        col_list = ", ".join(_escape_column(c) for c in columns)
-        placeholders = ", ".join("%s" for _ in columns)
-        updates = ", ".join(
-            f"{_escape_column(c)} = VALUES({_escape_column(c)})"
-            for c in update_cols
-        )
-        sql = (
-            f"INSERT INTO {_escape_column(table_name)} ({col_list}) "
-            f"VALUES ({placeholders}) "
-            f"ON DUPLICATE KEY UPDATE {updates}"
-        )
-        return self._execute_batch(sql, data)
 
     # -- internal --
 

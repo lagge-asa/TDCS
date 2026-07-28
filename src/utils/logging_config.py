@@ -8,7 +8,6 @@
 import json
 import logging
 import logging.handlers
-import time
 from pathlib import Path
 
 from .trace import get_trace_id, get_task_id

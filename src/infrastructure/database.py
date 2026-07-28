@@ -1,26 +1,20 @@
 """
-数据库连接池 + 读写分离
+数据库连接池
 
 - master_conn(): 写操作 (INSERT/UPDATE/DELETE)
-- slave_conn():  读操作 (SELECT), 无从库时降级到主库
+- slave_conn():  读操作 (SELECT), 等同于 master_conn()
 - 连接池由 SQLAlchemy create_engine 管理
 
 优化:
 - _create_engine 补充 read_timeout/write_timeout，防慢查询挂死连接池
-- slave_conn 维护从库健康状态，故障从库短期摘除后自动恢复
-- max_overflow 固定为 pool_size（而非 *2），防连接数爆炸
 - master_conn rollback 加保护，防止二次异常掩盖原始错误
-- 新增 check_slaves() 返回各从库延迟状态
 """
 
 import logging
-import random
-import time
-import threading
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional
+from typing import TYPE_CHECKING, Iterator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import QueuePool
 
@@ -31,60 +25,9 @@ from ..core.exceptions import RetryableError
 
 logger = logging.getLogger(__name__)
 
-# 从库故障后摘除的冷却时间（秒）
-_SLAVE_COOLDOWN = 60
-
-
-class _ManagedConn:
-    """支持 slave->master fallback 的数据库连接上下文管理器.
-
-    避开 @contextmanager 的 yield 次数限制，支持连接失败后的安全回退。
-    """
-
-    def __init__(self, db, engine, slave_idx):
-        self.db = db
-        self.engine = engine
-        self._slave_idx = slave_idx
-        self._is_master = engine is db._master
-        self._conn = None
-
-    def __enter__(self):
-        try:
-            self._conn = self.engine.connect()
-            return self._conn
-        except Exception as exc:
-            if self._is_master:
-                raise
-            # slave 连接失败，回退到 master
-            logger.warning(
-                "Slave[%d] conn failed: %s, falling back to master",
-                self._slave_idx, exc)
-            if self._slave_idx is not None:
-                with self.db._health_lock:
-                    self.db._slave_health[self._slave_idx] = time.monotonic()
-            self.engine = self.db._master
-            self._is_master = True
-            self._conn = self.engine.connect()
-            return self._conn
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._conn is None:
-            return False
-        try:
-            if exc_type:
-                self._conn.rollback()
-        except Exception:
-            pass
-        self._conn.close()
-        # 若成功使用的是 slave，标记其恢复健康
-        if not self._is_master and self._slave_idx is not None:
-            with self.db._health_lock:
-                self.db._slave_health[self._slave_idx] = None
-        return False
-
 
 class DatabaseManager:
-    """连接池管理器, 支持读写分离."""
+    """连接池管理器."""
 
     def __init__(self, config: "AppConfig") -> None:
         self._master = self._create_engine(
@@ -94,20 +37,10 @@ class DatabaseManager:
             pool_recycle=config.db_master_pool_recycle,
             connect_timeout=config.db_master_connect_timeout,
         )
-        self._slaves: List = [
-            self._create_engine(dsn)
-            for dsn in config.db_slave_dsns
-        ]
-        # 从库健康状态：{index: failed_at timestamp or None}
-        self._slave_health: Dict[int, Optional[float]] = {
-            i: None for i in range(len(self._slaves))
-        }
-        self._health_lock = threading.Lock()
-        logger.info("DatabaseManager initialized, %d slave(s)",
-                    len(self._slaves))
+        logger.info("DatabaseManager initialized")
 
     @contextmanager
-    def master_conn(self) -> Iterator["_ManagedConn"]:
+    def master_conn(self) -> Iterator:
         """获取主库连接 (写操作)."""
         with self._master.connect() as conn:
             try:
@@ -120,77 +53,13 @@ class DatabaseManager:
                     pass
                 raise exc
 
-    def slave_conn(self) -> "_ManagedConn":
-        """获取从库连接 (读操作). 无从库或健康从库时降级到主库.
-
-        返回上下文管理器对象，支持 with 语法。内部不依赖 @contextmanager
-        的 yield，因此可以安全地在 fallback 到 master 后仍正确关闭连接。
-        """
-        engine, slave_idx = self._pick_slave()
-        return _ManagedConn(self, engine, slave_idx)
-
-    def _pick_slave(self):
-        """选择一个健康从库，全部故障时返回主库."""
-        if not self._slaves:
-            return self._master, None
-        now = time.monotonic()
-        with self._health_lock:
-            healthy = [
-                i for i, failed_at in self._slave_health.items()
-                if failed_at is None or (now - failed_at) > _SLAVE_COOLDOWN
-            ]
-        if not healthy:
-            logger.warning("All slaves unhealthy, using master for read")
-            return self._master, None
-        idx = random.choice(healthy)
-        return self._slaves[idx], idx
-
-    def check_master(self) -> bool:
-        """检查主库连通性."""
-        try:
-            with self._master.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            return True
-        except Exception as e:
-            logger.error("Master DB health check failed: %s", e)
-            return False
-
-    def check_slaves(self) -> List[dict]:
-        """检查各从库连通性，返回状态列表."""
-        results = []
-        now = time.monotonic()
-        for i, engine in enumerate(self._slaves):
-            with self._health_lock:
-                failed_at = self._slave_health.get(i)
-            in_cooldown = (
-                failed_at is not None
-                and (now - failed_at) <= _SLAVE_COOLDOWN
-            )
-            if in_cooldown:
-                results.append({
-                    "index": i, "status": "cooldown",
-                    "cooldown_remaining": round(
-                        _SLAVE_COOLDOWN - (now - failed_at), 1)
-                })
-                continue
-            try:
-                t0 = time.monotonic()
-                with engine.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                results.append({
-                    "index": i, "status": "ok",
-                    "latency_ms": round((time.monotonic() - t0) * 1000, 1)
-                })
-            except Exception as e:
-                results.append({"index": i, "status": "error",
-                                 "error": str(e)})
-        return results
+    def slave_conn(self):
+        """获取读连接，等同于 master_conn()."""
+        return self.master_conn()
 
     def dispose(self) -> None:
-        """关闭所有连接池."""
+        """关闭连接池."""
         self._master.dispose()
-        for s in self._slaves:
-            s.dispose()
 
     @staticmethod
     def _create_engine(dsn: str, pool_size: int = 5,

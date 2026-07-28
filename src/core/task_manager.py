@@ -40,8 +40,6 @@ class TaskManager:
         for task in self._cm.config.tasks:
             if task.enabled:
                 self.start_task(task.task_id)
-        threading.Thread(target=self._monthly_check_loop,
-                         daemon=True, name="MonthlyCheck").start()
 
     def start_task(self, task_id: str) -> None:
         from ..watcher.event_handler import EventHandler
@@ -135,23 +133,3 @@ class TaskManager:
         )
         if result != SubmitResult.QUEUED:
             logger.debug("Submit %s: %s", file_path, result.value)
-
-    def _monthly_check_loop(self) -> None:
-        """每月 1 日触发月表生命周期管理."""
-        import time
-        while not self._stop.is_set():
-            now = datetime.now()
-            month_key = now.strftime("%Y%m")
-            if (now.day == 1
-                    and month_key != self._last_lifecycle_month
-                    and self._lifecycle):
-                for task in self._cm.config.tasks:
-                    if task.retention_months > 0:
-                        try:
-                            self._lifecycle.run(task)
-                        except Exception as e:
-                            # 单个 task 失败不影响其他 task
-                            logger.error("Monthly lifecycle error for task %s: %s",
-                                         task.task_id, e)
-                self._last_lifecycle_month = month_key
-            self._stop.wait(3600)  # 每小时检查一次，stop 时可立即唤醒

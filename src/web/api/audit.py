@@ -4,8 +4,9 @@
 GET /api/v1/audit-logs/    查询审计日志（admin，分页+过滤）
 """
 
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request, current_app, Response
 from sqlalchemy import text
+import csv, io
 
 from ..auth import require_auth
 from ..response import ok, paginated
@@ -71,3 +72,40 @@ def list_audit_logs():
     } for r in rows]
 
     return paginated(logs, page, page_size, total)
+
+
+@bp.get("/export")
+@require_auth("admin")
+def export_audit_csv():
+    """导出审计日志为 CSV。"""
+    db = current_app.config.get("db")
+    if not db:
+        return Response("no data", mimetype="text/csv")
+
+    username = request.args.get("username", "").strip()
+    action = request.args.get("action", "").strip()
+    conditions = []
+    params = {}
+    if username:
+        conditions.append("username = :username")
+        params["username"] = username
+    if action:
+        conditions.append("action LIKE :action")
+        params["action"] = f"%{action}%"
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    with db.slave_conn() as conn:
+        rows = conn.execute(text(f"""
+            SELECT timestamp, username, user_ip, action, target
+            FROM audit_log {where}
+            ORDER BY timestamp DESC LIMIT 10000
+        """), params).mappings().all()
+
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(["时间", "用户", "IP", "操作", "目标"])
+    for r in rows:
+        w.writerow([r["timestamp"], r["username"], r["user_ip"], r["action"], r["target"]])
+    csv_data = output.getvalue()
+    return Response(csv_data, mimetype="text/csv; charset=utf-8-sig",
+                    headers={"Content-Disposition": "attachment; filename=audit_logs.csv"})

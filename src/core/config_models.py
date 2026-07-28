@@ -25,7 +25,6 @@ class TaskConfig:
     stability_check_count: int
     extractor: str
     encoding: str
-    stream_threshold_mb: int
     batch_size: int
     transformer_module: str
     transformer_function: str
@@ -40,10 +39,8 @@ class TaskConfig:
     max_retries: int
     retry_backoff: Tuple[int, ...]
     dead_letter_dir: str
-    on_row_error: str
     archive_mode: str
     archive_dir: str
-    retain_structure: bool
     compress_after_days: int
     cleanup_after_days: int
     poll_interval: int
@@ -70,39 +67,6 @@ class WebConfig:
     rate_limit: str
     server: str
     threads: int
-
-
-@dataclass(frozen=True)
-class EncryptionConfig:
-    """加密配置"""
-    enabled: bool
-    algorithm: str
-    key_env: str
-
-
-@dataclass(frozen=True)
-class CacheLocalConfig:
-    """本地缓存配置"""
-    enabled: bool
-    maxsize: int
-    ttl: int
-
-
-@dataclass(frozen=True)
-class CacheRedisConfig:
-    """Redis 缓存配置"""
-    enabled: bool
-    host: str
-    port: int
-    password: str
-    db: int
-
-
-@dataclass(frozen=True)
-class CacheConfig:
-    """缓存配置（本地 + Redis）"""
-    local: CacheLocalConfig
-    redis: CacheRedisConfig
 
 
 @dataclass(frozen=True)
@@ -154,11 +118,9 @@ class AppConfig:
     db_master_pool_recycle: int
     db_master_connect_timeout: int
     db_slave_dsns: Tuple[str, ...]
-    cache: CacheConfig
     worker_threads: int
     queue_maxsize: int
     task_timeout: int
-    encryption: EncryptionConfig
     ha: HAConfig
     web: WebConfig
     monitoring: MonitoringConfig

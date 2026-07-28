@@ -15,9 +15,7 @@ if TYPE_CHECKING:
     from ..core.config import ConfigManager
     from ..core.task_manager import TaskManager
     from ..infrastructure.worker_pool import WorkerPool
-    from ..infrastructure.ha_elector import HAElector
     from ..monitoring.quality_reporter import QualityReporter
-    from ..etl.encryption import Encryption
     from ..infrastructure.database import DatabaseManager
     from ..etl.cleaner_registry import CleanerRegistry
 
@@ -27,9 +25,7 @@ logger = logging.getLogger(__name__)
 def create_app(config_manager: ConfigManager,
                task_manager: Optional[TaskManager] = None,
                worker_pool: Optional[WorkerPool] = None,
-               ha_elector: Optional[HAElector] = None,
                quality_reporter: Optional[QualityReporter] = None,
-               encryption: Optional[Encryption] = None,
                db: Optional[DatabaseManager] = None,
                cleaner_registry: Optional[CleanerRegistry] = None) -> Flask:
     app = Flask(__name__)
@@ -50,10 +46,8 @@ def create_app(config_manager: ConfigManager,
     app.config["config_manager"] = config_manager
     app.config["task_manager"] = task_manager
     app.config["worker_pool"] = worker_pool
-    app.config["ha_elector"] = ha_elector
     app.config["limiter"] = limiter  # 供 Blueprint 中端点级 rate limit 使用
     app.config["quality_reporter"] = quality_reporter
-    app.config["encryption"] = encryption
     app.config["db"] = db
     app.config["cleaner_registry"] = cleaner_registry
 

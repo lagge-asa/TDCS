@@ -17,8 +17,7 @@ from urllib.parse import quote
 import yaml
 
 from .config_models import (
-    AppConfig, TaskConfig, HAConfig, WebConfig, EncryptionConfig,
-    CacheConfig, CacheLocalConfig, CacheRedisConfig,
+    AppConfig, TaskConfig, HAConfig, WebConfig,
     MonitoringConfig, PrometheusConfig,
     AlertingConfig, AlertingRuleConfig, AlertingChannelConfig,
 )
@@ -26,9 +25,6 @@ from .config_validator import validate_config
 from .exceptions import ConfigValidationError
 
 logger = logging.getLogger(__name__)
-
-ConfigChangeListener = Callable[[AppConfig, AppConfig], None]
-
 
 class ConfigManager:
     """配置管理器: frozen dataclass + 原子替换 + 热加载."""
@@ -38,7 +34,7 @@ class ConfigManager:
         self._config: Optional[AppConfig] = None
         self._task_index: dict = {}  # task_id -> TaskConfig，O(1) 查找
         self._lock = threading.Lock()
-        self._listeners: List[ConfigChangeListener] = []
+
 
     def load(self) -> None:
         """初始加载, 失败则抛异常阻止启动."""
@@ -63,27 +59,6 @@ class ConfigManager:
             new_config = self._build(raw)
             new_task_index = {t.task_id: t for t in new_config.tasks}
 
-            # 先在锁外执行所有 listener，记录失败
-            with self._lock:
-                old_config = self._config
-                old_task_index = self._task_index
-                listeners = list(self._listeners)
-
-            failed = []
-            for fn in listeners:
-                try:
-                    fn(old_config, new_config)
-                except Exception as e:
-                    logger.error("Config listener error [%s]: %s", fn.__name__, e)
-                    failed.append(fn.__name__)
-
-            if failed:
-                # listener 失败时不更新配置，保持旧状态
-                logger.warning("Hot-reload aborted: %d listener(s) failed: %s", len(failed), failed)
-                raise ConfigValidationError(
-                    f"Config reload aborted due to {len(failed)} listener failure(s): {failed}")
-
-            # 全部 listener 成功，原子更新配置
             with self._lock:
                 self._config = new_config
                 self._task_index = new_task_index
@@ -99,9 +74,6 @@ class ConfigManager:
         if self._config is None:
             raise ConfigValidationError("Configuration not loaded yet")
         return self._config
-
-    def add_listener(self, fn: ConfigChangeListener) -> None:
-        self._listeners.append(fn)
 
     def get_task(self, task_id: str) -> Optional[TaskConfig]:
         """O(1) 按 task_id 查找任务配置。"""
@@ -153,28 +125,9 @@ class ConfigManager:
             db_master_connect_timeout=db["master"].get("connect_timeout", 10),
             db_slave_dsns=tuple(
                 self._build_dsn(s) for s in db.get("slaves", [])),
-            cache=CacheConfig(
-                local=CacheLocalConfig(
-                    enabled=cache.get("local", {}).get("enabled", True),
-                    maxsize=cache.get("local", {}).get("maxsize", 1000),
-                    ttl=cache.get("local", {}).get("ttl", 300),
-                ),
-                redis=CacheRedisConfig(
-                    enabled=cache.get("redis", {}).get("enabled", False),
-                    host=cache.get("redis", {}).get("host", "127.0.0.1"),
-                    port=cache.get("redis", {}).get("port", 6379),
-                    password=cache.get("redis", {}).get("password", ""),
-                    db=cache.get("redis", {}).get("db", 0),
-                ),
-            ),
             worker_threads=cc.get("worker_threads", 4),
             queue_maxsize=cc.get("queue_maxsize", 500),
             task_timeout=cc.get("task_timeout", 300),
-            encryption=EncryptionConfig(
-                enabled=enc.get("enabled", False),
-                algorithm=enc.get("algorithm", "fernet"),
-                key_env=enc.get("key_env", "ETL_ENCRYPTION_KEY"),
-            ),
             ha=HAConfig(
                 enabled=ha.get("enabled", False),
                 heartbeat_interval=ha.get("heartbeat_interval", 10),
@@ -253,7 +206,6 @@ class ConfigManager:
             stability_check_count=m.get("stability_check_count", 3),
             extractor=e.get("extractor", "csv"),
             encoding=e.get("encoding", "auto"),
-            stream_threshold_mb=e.get("stream_threshold_mb", 100),
             batch_size=e.get("batch_size", 1000),
             transformer_module=e["transformer_module"],
             transformer_function=e["transformer_function"],
@@ -268,10 +220,8 @@ class ConfigManager:
             max_retries=eh.get("max_retries", 3),
             retry_backoff=tuple(eh.get("retry_backoff", [5, 30, 120])),
             dead_letter_dir=eh.get("dead_letter_dir", ""),
-            on_row_error=eh.get("on_row_error", "skip"),
             archive_mode=ar.get("mode", "move"),
             archive_dir=ar.get("archive_dir", ""),
-            retain_structure=ar.get("retain_structure", True),
             compress_after_days=ar.get("compress_after_days", 7),
             cleanup_after_days=ar.get("cleanup_after_days", 90),
             poll_interval=sc.get("poll_interval", 0),

@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -328,3 +329,75 @@ def validate_cleaner(name: str):
         return ok({"valid": True, "message": "语法检查通过"})
     except SyntaxError as e:
         return ok({"valid": False, "message": f"语法错误: {e}"})
+
+
+@bp.post("/create")
+@require_auth("operator")
+def create_cleaner():
+    """新建清洗模板。"""
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    code = data.get("code", "")
+    if not name:
+        return error("MISSING_FIELD", "缺少模板名称", status=400)
+    if not code:
+        return error("MISSING_FIELD", "缺少模板代码", status=400)
+    # 名称安全校验
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+        return error("INVALID_NAME", "模板名称只能包含字母、数字和下划线，且不能以数字开头", status=400)
+
+    reg = _get_registry()
+    fpath = os.path.join(reg.get_templates_dir(), f"{name}.py")
+    if os.path.exists(fpath):
+        return error("TEMPLATE_EXISTS", f"模板 '{name}' 已存在", status=409)
+
+    try:
+        import ast as _ast
+        _ast.parse(code)
+    except SyntaxError as e:
+        return error("SYNTAX_ERROR", f"代码语法错误: {e}", status=422)
+
+    with open(fpath, "w", encoding="utf-8") as f:
+        f.write(code)
+    logger.info("Cleaner template created: %s", name)
+    return ok({"name": name, "message": "模板创建成功"})
+
+
+@bp.put("/<name>")
+@require_auth("operator")
+def update_cleaner(name: str):
+    """更新清洗模板代码。"""
+    data = request.get_json() or {}
+    code = data.get("code", "")
+    if not code:
+        return error("MISSING_FIELD", "缺少模板代码", status=400)
+
+    reg = _get_registry()
+    fpath = os.path.join(reg.get_templates_dir(), f"{name}.py")
+    if not os.path.exists(fpath):
+        return error("TEMPLATE_NOT_FOUND", f"模板 '{name}' 不存在", status=404)
+
+    try:
+        import ast as _ast
+        _ast.parse(code)
+    except SyntaxError as e:
+        return error("SYNTAX_ERROR", f"代码语法错误: {e}", status=422)
+
+    with open(fpath, "w", encoding="utf-8") as f:
+        f.write(code)
+    logger.info("Cleaner template updated: %s", name)
+    return ok({"name": name, "message": "模板更新成功"})
+
+
+@bp.delete("/<name>")
+@require_auth("admin")
+def delete_cleaner(name: str):
+    """删除清洗模板。"""
+    reg = _get_registry()
+    fpath = os.path.join(reg.get_templates_dir(), f"{name}.py")
+    if not os.path.exists(fpath):
+        return error("TEMPLATE_NOT_FOUND", f"模板 '{name}' 不存在", status=404)
+
+    os.remove(fpath)
+    logger.info("Cleaner template deleted: %s", name)
+    return ok({"name": name, "message": "模板已删除"})

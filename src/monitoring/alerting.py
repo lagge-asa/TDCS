@@ -163,16 +163,6 @@ class Alerter:
                 level="warning",
             )
 
-    def check_failed_files_alert(self, task_id: str, count: int) -> None:
-        """失败文件数超过阈值时触发告警。"""
-        threshold = self._cfg.rules.failed_files_threshold
-        if count >= threshold:
-            self.send_alert(
-                f"文件失败率高: {task_id}",
-                f"失败文件数 {count} >= 阈值 {threshold}",
-                level="error",
-            )
-
     def notify_pipeline_failure(self, task_id: str,
                                  file_path: str, error: str) -> None:
         """Pipeline 致命错误时通知（由 FileProcessor 调用）."""

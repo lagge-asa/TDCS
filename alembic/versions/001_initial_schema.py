@@ -7,6 +7,7 @@ Revision ID: 001
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+import bcrypt
 
 revision: str = "001"
 down_revision: Union[str, None] = None
@@ -30,7 +31,11 @@ def upgrade() -> None:
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
     )
-    op.execute("INSERT IGNORE INTO users (username, password_hash, role) VALUES ('admin', 'CHANGE_ON_FIRST_RUN', 'admin')")
+    op.execute(
+        "INSERT IGNORE INTO users (username, password_hash, role) "
+        "VALUES ('admin', :pw, 'admin')",
+        {"pw": bcrypt.hashpw(b"admin", bcrypt.gensalt()).decode()}
+    )
 
     # 2. 文件处理状态表
     op.create_table(

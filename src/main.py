@@ -23,11 +23,9 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     from .infrastructure.database import DatabaseManager
     from .infrastructure.state_tracker import StateTracker
     from .infrastructure.worker_pool import WorkerPool
-    from .infrastructure.ha_elector import HAElector
     from .infrastructure.file_archiver import FileArchiver
     from .etl.table_router import TableRouter
     from .etl.loader import Loader
-    from .etl.encryption import Encryption
     from .etl.extractor import StreamingExtractor
     from .etl.transform_sandbox import TransformSandbox
     from .etl.cleaner_registry import CleanerRegistry
@@ -54,7 +52,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     db = DatabaseManager(cfg)
     st = StateTracker(db, cfg.instance_id)
     archiver = FileArchiver(st)
-    enc = Encryption(cfg.encryption)
+
     qr = QualityReporter(db)
 
     # 4. ETL 组件
@@ -69,7 +67,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     loader = Loader(db)
 
     def make_pipeline(task_id: str) -> ETLPipeline:
-        return ETLPipeline(extractor, sandbox, router, loader, enc, qr)
+        return ETLPipeline(extractor, sandbox, router, loader, None, qr)
 
     # 5. 告警
     alerter = Alerter(cfg.monitoring.alerting)
@@ -77,28 +75,19 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     # 6. Worker Pool（先占位，process_fn 依赖 tm，tm 依赖 pool，循环依赖用 setter 解决）
     pool = WorkerPool(None, cfg.worker_threads, cfg.queue_maxsize)
 
-    # 7. HA
-    ha = HAElector(
-        db, cfg.instance_id, cfg.ha,
-        on_become_active=lambda: logger.info("Became ACTIVE"),
-        on_become_standby=lambda: logger.info("Became STANDBY"),
-    )
-
-    # 8. Task Manager
-    tm = TaskManager(cm, db, pool, st, ha, archiver)
+    # 7. Task Manager
+    tm = TaskManager(cm, db, pool, st, None, archiver)
 
     # 9. 现在 tm 已存在，完成 FileProcessor 并注入 pool
     process_fn = FileProcessor(cm, st, make_pipeline, qr, archiver,
                                alerter=alerter, task_manager=tm)
     pool._process_fn = process_fn
 
-    # 10. Web
-    app = create_app(cm, tm, pool, ha, qr, enc, db, cleaner_registry)
+    # 8. Web
+    app = create_app(cm, tm, pool, qr, db, cleaner_registry)
 
     # 11. 启动
     pool.start()
-    if cfg.ha.enabled:
-        ha.start()
     tm.start_all()
 
     _stop_for_web: threading.Event = None  # Web 线程崩溃时用于通知主线程

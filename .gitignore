@@ -29,6 +29,7 @@ config/prod*.yaml
 # Logs & data
 *.log
 logs/
+*.pid
 
 # IDE
 .vscode/

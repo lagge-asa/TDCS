@@ -176,9 +176,6 @@ class WorkerPool:
         with self._paused_lock:
             self._paused.discard(task_id)
 
-    def get_breaker(self, task_id: str) -> CircuitBreaker:
-        return self._get_breaker(task_id)
-
     def active_count(self) -> int:
         """当前存活的 worker 线程数."""
         return sum(1 for w in self._workers if w.is_alive())
@@ -186,12 +183,6 @@ class WorkerPool:
     def queue_size(self) -> int:
         """当前队列积压数."""
         return self._queue.qsize()
-
-    def breaker_states(self) -> dict:
-        """返回各 task_id 的熔断器状态."""
-        with self._breaker_lock:
-            return {tid: cb.state.value
-                    for tid, cb in self._breakers.items()}
 
     def stop(self) -> None:
         """发送停止信号并等待 supervisor 和所有 worker 线程退出（最多 30s）。"""
