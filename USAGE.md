@@ -39,12 +39,27 @@ pip install -r requirements-dev.txt
 **使用 Docker 启动 MySQL 和 Redis（开发环境）**
 
 ```bash
-docker-compose up -d mysql redis
+docker-compose up -d
 ```
+
+默认连接信息：
+
+| 服务 | 端口 | 用户名 | 密码 | 数据库 |
+|------|------|--------|------|--------|
+| MySQL 8.0 | 3306 | root | `root_dev_pass` | `etl_dev` |
+| Redis 7 | 6379 | — | 无 | — |
 
 ---
 
 ## 2. 数据库初始化
+
+**方式一：Alembic 迁移（推荐）**
+
+```bash
+alembic upgrade head
+```
+
+**方式二：手动导入 SQL**
 
 ```bash
 mysql -u root -p < scripts/init_db.sql
