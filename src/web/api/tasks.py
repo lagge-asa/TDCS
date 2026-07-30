@@ -15,8 +15,7 @@ from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
-from ..response import ok, error
-from ..pagination import get_pagination
+from ..response import ok, error, get_pagination
 
 bp = Blueprint("tasks", __name__)
 
@@ -65,12 +64,17 @@ def _task_file_stats(db, task_id: str) -> dict:
     return {}
 
 
-def _task_to_dict(task, db=None) -> dict:
+def _task_to_dict(task, db=None, pool=None, tm=None) -> dict:
     stats = _task_file_stats(db, task.task_id) if db else {}
     return {
         "task_id": task.task_id,
         "name": task.name,
         "enabled": task.enabled,
+        "paused": pool.is_task_paused(task.task_id) if pool else False,
+        "circuit_state": pool.get_breaker_state(task.task_id) if pool else "CLOSED",
+        "watcher_running": bool(tm.is_running(task.task_id)) if tm else False,
+        "queue_backlog": pool.queue_backlog(task.task_id) if pool else 0,
+        "priority": task.priority,
         "priority": task.priority,
         "monitor_folder": task.monitor_folder,
         "file_extensions": list(task.file_extensions),
@@ -91,7 +95,9 @@ def _task_to_dict(task, db=None) -> dict:
 def list_tasks():
     cm = current_app.config["config_manager"]
     db = current_app.config.get("db")
-    tasks = [_task_to_dict(t, db) for t in cm.config.tasks]
+    pool = current_app.config.get("worker_pool")
+    tm = current_app.config.get("task_manager")
+    tasks = [_task_to_dict(t, db, pool, tm) for t in cm.config.tasks]
     return ok({"tasks": tasks, "total": len(tasks)})
 
 
@@ -103,7 +109,9 @@ def get_task(task_id: str):
     if not task:
         return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
     db = current_app.config.get("db")
-    return ok(_task_to_dict(task, db))
+    pool = current_app.config.get("worker_pool")
+    tm = current_app.config.get("task_manager")
+    return ok(_task_to_dict(task, db, pool, tm))
 
 
 @bp.get("/<task_id>/stats")
@@ -182,27 +190,29 @@ def trigger_task(task_id: str):
     return ok({"status": "triggered", "task_id": task_id})
 
 
-@bp.post("/<task_id>/enable")
-@require_auth("admin")
-def enable_task(task_id: str):
-    """启用任务并启动 watcher."""
+def _set_task_state(task_id: str, action: str) -> tuple:
+    """启用/禁用任务的通用实现."""
     cm = current_app.config.get("config_manager")
     tm = current_app.config.get("task_manager")
     if not cm or not cm.get_task(task_id):
         return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
     if tm:
-        tm.start_task(task_id)
-    return ok({"status": "enabled", "task_id": task_id})
+        if action == "enable":
+            tm.start_task(task_id)
+        else:
+            tm.stop_task(task_id)
+    return ok({"status": f"{action}d", "task_id": task_id})
+
+
+@bp.post("/<task_id>/enable")
+@require_auth("admin")
+def enable_task(task_id: str):
+    """启用任务并启动 watcher."""
+    return _set_task_state(task_id, "enable")
 
 
 @bp.post("/<task_id>/disable")
 @require_auth("admin")
 def disable_task(task_id: str):
     """禁用任务并停止 watcher."""
-    cm = current_app.config.get("config_manager")
-    tm = current_app.config.get("task_manager")
-    if not cm or not cm.get_task(task_id):
-        return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
-    if tm:
-        tm.stop_task(task_id)
-    return ok({"status": "disabled", "task_id": task_id})
+    return _set_task_state(task_id, "disable")

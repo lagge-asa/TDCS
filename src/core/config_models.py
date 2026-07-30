@@ -29,7 +29,6 @@ class TaskConfig:
     transformer_module: str
     transformer_function: str
     sandbox_timeout: int
-    sandbox_memory_mb: int
     base_table: str
     partition_field: str
     partition_field_format: str

@@ -4,7 +4,6 @@
 职责:
 - 启动/停止/暂停/恢复/手动触发任务
 - 死信处理: retry_count >= max_retries -> move_to_dead_letter
-- 每月 1 日触发 MonthlyTableLifecycle
 """
 
 import logging
@@ -13,7 +12,7 @@ import shutil
 import threading
 import uuid
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +20,17 @@ logger = logging.getLogger(__name__)
 class TaskManager:
     """多任务生命周期管理器"""
     def __init__(self, config_manager, db, worker_pool,
-                 state_tracker, ha_elector, file_archiver,
-                 monthly_lifecycle=None):
+                 state_tracker, ha_elector, file_archiver):
         self._cm = config_manager
         self._db = db
         self._pool = worker_pool
         self._st = state_tracker
         self._ha = ha_elector
         self._archiver = file_archiver
-        self._lifecycle = monthly_lifecycle
         self._watchers: Dict[str, object] = {}
         self._scanners: Dict[str, object] = {}
         self._stop = threading.Event()
-        self._last_lifecycle_month: Optional[str] = None
+        self._lock = threading.Lock()
 
     def start_all(self) -> None:
         """启动所有已启用任务."""
@@ -51,29 +48,35 @@ class TaskManager:
             logger.error("Task not found: %s", task_id)
             return
 
-        # 若已运行则先停止旧实例，防止线程泄漏
-        if task_id in self._watchers or task_id in self._scanners:
-            self.stop_task(task_id)
+        with self._lock:
+            # 若已运行则先停止旧实例，防止线程泄漏
+            if task_id in self._watchers or task_id in self._scanners:
+                self._stop_task_locked(task_id)
 
-        # watchdog 监听
-        handler = EventHandler(task, self._on_file_detected)
-        observer = Observer()
-        observer.schedule(handler, task.monitor_folder,
-                          recursive=task.recursive)
-        observer.start()
-        self._watchers[task_id] = observer
+            # watchdog 监听
+            handler = EventHandler(task, self._on_file_detected)
+            observer = Observer()
+            observer.schedule(handler, task.monitor_folder,
+                              recursive=task.recursive)
+            observer.start()
+            self._watchers[task_id] = observer
 
-        # 增量轮询兜底
-        scanner = PollingScanner(task, self._st, self._pool)
-        scanner.start()
-        self._scanners[task_id] = scanner
+            # 增量轮询兜底
+            scanner = PollingScanner(task, self._st, self._pool)
+            scanner.start()
+            self._scanners[task_id] = scanner
         logger.info("Task started: %s", task_id)
 
     def stop_task(self, task_id: str) -> None:
+        with self._lock:
+            self._stop_task_locked(task_id)
+
+    def _stop_task_locked(self, task_id: str) -> None:
+        """内部：在持有 self._lock 时停止任务。"""
         if task_id in self._watchers:
             obs = self._watchers.pop(task_id)
             obs.stop()
-            obs.join(timeout=5)  # 等待线程真正退出
+            obs.join(timeout=5)
         if task_id in self._scanners:
             self._scanners.pop(task_id).stop()
 
@@ -87,6 +90,18 @@ class TaskManager:
         """手动触发立即扫描."""
         if task_id in self._scanners:
             self._scanners[task_id].scan_now()
+
+    def is_running(self, task_id: str) -> bool:
+        """检查任务的 watcher 和 scanner 是否正在运行."""
+        with self._lock:
+            has_watcher = task_id in self._watchers
+            has_scanner = task_id in self._scanners
+            # observer 的 is_alive() 检查线程存活
+            watcher_alive = has_watcher and self._watchers[task_id].is_alive()
+            scanner_alive = (has_scanner and
+                             self._scanners[task_id]._thread is not None and
+                             self._scanners[task_id]._thread.is_alive())
+        return watcher_alive or scanner_alive
 
     def move_to_dead_letter(self, task_id: str,
                              file_path: str) -> None:
@@ -114,22 +129,16 @@ class TaskManager:
         except Exception as e:
             logger.error("Failed to move to dead letter: %s", e)
 
-    def _on_file_detected(self, task_id: str, file_path: str,
-                           file_mtime: int, file_size: int,
-                           file_hash: str) -> None:
+    def _on_file_detected(self, ref: "FileRef") -> None:
         """文件检测回调 -> 提交到 WorkerPool."""
         from ..infrastructure.worker_pool import SubmitResult
-        task = self._cm.get_task(task_id)
+        task = self._cm.get_task(ref.task_id)
         if not task:
             return
         result = self._pool.submit(
+            ref,
             priority=task.priority,
-            task_id=task_id,
-            file_path=file_path,
-            file_mtime=file_mtime,
-            file_size=file_size,
-            file_hash=file_hash,
-            is_active=self._ha.is_active,
+            is_active=self._ha.is_active if self._ha else True,
         )
         if result != SubmitResult.QUEUED:
-            logger.debug("Submit %s: %s", file_path, result.value)
+            logger.debug("Submit %s: %s", ref.file_path, result.value)

@@ -10,8 +10,7 @@ from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
-from ..response import ok, error, paginated
-from ..pagination import get_pagination
+from ..response import ok, error, get_pagination, paginated
 
 bp = Blueprint("quality", __name__)
 

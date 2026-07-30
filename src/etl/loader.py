@@ -9,7 +9,7 @@
 优化:
 - _execute_batch 按 CHUNK_SIZE 分片，避免超 max_allowed_packet
 - _prepare_rows 取所有行键并集，缺失键填 None，不因首行字段不足而截断
-- load_batch 记录 ignored 行数差（写入前后 rowcount 对比）
+- load_batch 记录实际写入行数（INSERT IGNORE 下的 cur.rowcount）
 """
 
 import logging

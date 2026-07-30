@@ -65,14 +65,15 @@ def run_lifecycle():
     task_id = data.get("task_id")  # 可选，不填则检查所有
 
     try:
-        from ...etl.monthly_lifecycle import MonthlyTableLifecycle
-        lifecycle = MonthlyTableLifecycle(db)
+        router = current_app.config.get("table_router")
+        if not router:
+            return error("SERVICE_NOT_READY", "TableRouter 未初始化", status=503)
         ran = []
         for task in cm.config.tasks:
             if task_id and task.task_id != task_id:
                 continue
             if task.retention_months > 0:
-                lifecycle.run(task)
+                router.archive_old_tables(task)
                 ran.append(task.task_id)
         return ok({"status": "ok", "ran_for_tasks": ran})
     except Exception as e:

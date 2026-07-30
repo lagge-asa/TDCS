@@ -6,6 +6,7 @@ from src.etl.loader import Loader
 def make_db():
     """构造带原生 DBAPI cursor mock 的 db 对象."""
     cursor = MagicMock()
+    cursor.rowcount = 0  # 确保 rowcount 是真实 int，避免 MagicMock 比较崩溃
     raw_conn = MagicMock()
     raw_conn.cursor.return_value.__enter__ = lambda s: cursor
     raw_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)

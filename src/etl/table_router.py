@@ -16,7 +16,8 @@
 import re
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import text
 
 from ..core.exceptions import FatalError
@@ -150,3 +151,24 @@ class TableRouter:
                 f"Invalid table name '{name}': "
                 "must match ^[a-z][a-z0-9_]*$ "
                 "(lowercase letters, digits, underscores; start with letter)")
+
+    def archive_old_tables(self, task_config) -> None:
+        """超期月表标记为 ARCHIVED（不删数据，DROP 待后续实现）."""
+        if task_config.retention_months <= 0:
+            return
+        from dateutil.relativedelta import relativedelta
+        cutoff = date.today() - relativedelta(
+            months=task_config.retention_months)
+        cutoff_str = cutoff.strftime("%Y-%m")
+
+        with self.db.master_conn() as conn:
+            conn.execute(text("""
+                UPDATE monthly_table_registry
+                SET lifecycle_status = 'ARCHIVED', archived_at = NOW()
+                WHERE task_id = :tid
+                  AND year_month <= :cutoff
+                  AND lifecycle_status = 'ACTIVE'
+            """), dict(tid=task_config.task_id, cutoff=cutoff_str))
+            conn.commit()
+            logger.info("Archived tables older than %s for task %s",
+                        cutoff_str, task_config.task_id)

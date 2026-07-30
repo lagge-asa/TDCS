@@ -43,38 +43,12 @@ class DatabaseNodeSchema(BaseModel):
     pool_timeout: Seconds1to300 = 30
     pool_recycle: Seconds300to86400 = 3600
     connect_timeout: Annotated[int, Field(ge=1, le=120)] = 10
-    auth_plugin: str = "caching_sha2_password"
-
-
-class CacheLocalSchema(BaseModel):
-    enabled: bool = True
-    maxsize: Annotated[int, Field(ge=10, le=100000)] = 1000
-    ttl: Annotated[int, Field(ge=10, le=86400)] = 300
-
-
-class CacheRedisSchema(BaseModel):
-    enabled: bool = False
-    host: str = "127.0.0.1"
-    port: Port = 6379
-    password: str = ""
-    db: Annotated[int, Field(ge=0, le=15)] = 0
-
-
-class CacheConfigSchema(BaseModel):
-    local: CacheLocalSchema = CacheLocalSchema()
-    redis: CacheRedisSchema = CacheRedisSchema()
 
 
 class ConcurrencyConfigSchema(BaseModel):
     worker_threads: Annotated[int, Field(ge=1, le=32)] = 4
     queue_maxsize: Annotated[int, Field(ge=10, le=10000)] = 500
     task_timeout: Annotated[int, Field(ge=10, le=3600)] = 300
-
-
-class EncryptionConfigSchema(BaseModel):
-    enabled: bool = False
-    algorithm: str = "fernet"
-    key_env: str = "ETL_ENCRYPTION_KEY"
 
 
 class HAConfigSchema(BaseModel):
@@ -86,9 +60,7 @@ class HAConfigSchema(BaseModel):
     @field_validator("degraded_mode")
     @classmethod
     def check_degraded_mode(cls, v: str) -> str:
-        if v not in ("pause", "standalone"):
-            raise ValueError("degraded_mode must be pause or standalone")
-        return v
+        return v  # deprecated, kept for backward compat
 
 
 class WebConfigSchema(BaseModel):
@@ -163,12 +135,10 @@ class MonitorConfigSchema(BaseModel):
 class EtlConfigSchema(BaseModel):
     extractor: str
     encoding: str = "auto"
-    stream_threshold_mb: Annotated[int, Field(ge=1, le=10000)] = 100
     batch_size: Annotated[int, Field(ge=1, le=100000)] = 1000
     transformer_module: str
     transformer_function: str
     sandbox_timeout: Annotated[int, Field(ge=5, le=300)] = 30
-    sandbox_memory_mb: Annotated[int, Field(ge=32, le=4096)] = 256
 
     @field_validator("extractor")
     @classmethod
@@ -199,20 +169,11 @@ class ErrorHandlingConfigSchema(BaseModel):
     max_retries: Annotated[int, Field(ge=0, le=10)] = 3
     retry_backoff: List[int] = [5, 30, 120]
     dead_letter_dir: str
-    on_row_error: str = "skip"
-
-    @field_validator("on_row_error")
-    @classmethod
-    def check_on_row_error(cls, v: str) -> str:
-        if v not in ("skip", "abort"):
-            raise ValueError("on_row_error must be skip or abort")
-        return v
 
 
 class ArchiveConfigSchema(BaseModel):
     mode: str = "move"
     archive_dir: str = ""
-    retain_structure: bool = True
     compress_after_days: Annotated[int, Field(ge=0)] = 7
     cleanup_after_days: Annotated[int, Field(ge=0)] = 90
 
@@ -253,9 +214,7 @@ class TaskConfigSchema(BaseModel):
 class AppConfigSchema(BaseModel):
     service: ServiceConfigSchema
     database: dict
-    cache: CacheConfigSchema = CacheConfigSchema()
     concurrency: ConcurrencyConfigSchema = ConcurrencyConfigSchema()
-    encryption: EncryptionConfigSchema = EncryptionConfigSchema()
     high_availability: HAConfigSchema = HAConfigSchema()
     web: WebConfigSchema
     monitoring: MonitoringConfigSchema = MonitoringConfigSchema()
@@ -302,7 +261,8 @@ def validate_config(raw: dict) -> List[str]:
 
     task_ids = [t.get("task_id") for t in raw.get("tasks", [])]
     if len(task_ids) != len(set(task_ids)):
-        dup = [t for t in task_ids if task_ids.count(t) > 1]
+        from collections import Counter
+        dup = [t for t, c in Counter(task_ids).items() if c > 1]
         errors.append(f"Duplicate task_id: {dup}")
 
     return errors

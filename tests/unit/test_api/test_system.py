@@ -13,9 +13,7 @@ def app_client(loaded_config_manager):
         loaded_config_manager,
         task_manager=None,
         worker_pool=None,
-        ha_elector=None,
         quality_reporter=None,
-        encryption=None,
         db=None,
         cleaner_registry=None,
     )

@@ -10,8 +10,6 @@ import os
 import threading
 from watchdog.events import FileSystemEventHandler
 
-from ..utils.file_hash import quick_hash
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +30,11 @@ class EventHandler(FileSystemEventHandler):
         if not event.is_directory:
             self._schedule(event.src_path)
 
+    def on_moved(self, event):
+        """处理文件移动/重命名——某些写入模式（原子保存：写临时文件 → rename）只触发 on_moved."""
+        if not event.is_directory:
+            self._schedule(event.dest_path)
+
     def _schedule(self, file_path: str) -> None:
         ext = os.path.splitext(file_path)[1].lower()
         if ext not in self._cfg.file_extensions:
@@ -39,7 +42,6 @@ class EventHandler(FileSystemEventHandler):
         with self._lock:
             if file_path in self._pending:
                 self._pending[file_path].cancel()
-                del self._pending[file_path]  # 立即清理已取消的定时器
             t = threading.Timer(
                 self._cfg.debounce_seconds,
                 self._check_stability,
@@ -90,8 +92,6 @@ class EventHandler(FileSystemEventHandler):
             t.start()
 
     def _emit(self, file_path: str, stat) -> None:
-        file_mtime = int(stat.st_mtime * 1000)
-        file_hash = quick_hash(file_path, stat.st_size)
-        self._on_file_ready(
-            self._cfg.task_id, file_path,
-            file_mtime, stat.st_size, file_hash)
+        from ..infrastructure.file_ref import FileRef
+        ref = FileRef.from_stat(self._cfg.task_id, file_path, stat)
+        self._on_file_ready(ref)

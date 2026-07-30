@@ -85,6 +85,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
 
     # 8. Web
     app = create_app(cm, tm, pool, qr, db, cleaner_registry)
+    app.config["table_router"] = router
 
     # 11. 启动
     pool.start()
@@ -116,8 +117,7 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
 
     # 等待停止信号
     if stop_event is not None:
-        import win32event
-        win32event.WaitForSingleObject(stop_event, win32event.INFINITE)
+        stop_event.wait()
     else:
         stop = threading.Event()
         signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -134,8 +134,6 @@ def bootstrap(config_path: str = None, stop_event=None) -> None:
     # 关闭顺序：先停 registry（worker 可能还在跑清洗），再等 pool 完成，最后释放 DB
     cleaner_registry.stop_watching()
     pool.stop()          # 发停止信号并等待所有 worker 线程退出
-    if cfg.ha.enabled:
-        ha.stop()
     db.dispose()         # 所有 worker 已退出后才释放连接池
 
 

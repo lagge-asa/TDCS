@@ -879,16 +879,23 @@ async function loadDashboard() {
  try {
  const d = await api('GET', '/api/v1/dashboard/');
  document.getElementById('kpiTasks').textContent = d.tasks?.enabled ?? '—';
+ const paused = d.tasks?.paused || 0;
  document.getElementById('kpiSuccess').textContent = d.files?.success ?? '—';
  document.getElementById('kpiFailed').textContent = d.files?.failed ?? '—';
  document.getElementById('kpiRows').textContent = (d.files?.total_rows ?? 0).toLocaleString();
+ // Paused / Circuit indicators
+ const circuits = (d.workers||{}).circuits_open || [];
+ const healthStatus = (d.health||{}).status || 'ok';
 
  // Worker / Queue
  const w = d.workers || {};
  document.getElementById('workerStatus').innerHTML =
  `<div class="mi"><span class="mk">活跃 Worker</span><span class="mv">${w.active_workers??'—'}</span></div>
  <div class="mi"><span class="mk">队列积压</span><span class="mv" style="color:${(w.queue_size||0)>200?'var(--red)':'var(--green)'}">${w.queue_size??'—'}</span></div>
+ ${circuits.length ? `<div class="mi"><span class="mk">熔断任务</span><span class="mv" style="color:var(--red)">${circuits.join(', ')}</span></div>` : ''}
+ ${paused ? `<div class="mi"><span class="mk">暂停任务</span><span class="mv" style="color:var(--amber)">${paused} 个</span></div>` : ''}
  <div class="mi"><span class="mk">数据库</span><span class="mv"><span class="dot ${(d.health||{}).db?'dot-green':'dot-red'}"></span>${(d.health||{}).db?'正常':'—'}</span></div>
+ <div class="mi"><span class="mk">服务状态</span><span class="mv"><span class="dot ${healthStatus==='ok'?'dot-green':'dot-red'}"></span>${healthStatus}</span></div>
  <div class="mi"><span class="mk">HA</span><span class="mv">${(d.ha||{}).enabled?((d.ha||{}).is_active?'主节点':'备节点'):'standalone'}</span></div>
  <div style="color:var(--text-muted);font-size:10px;margin-top:6px;text-align:right">${new Date().toLocaleTimeString()}</div>`;
 
@@ -947,26 +954,35 @@ async function loadTasks() {
  ? `<table><thead><tr><th>任务 ID</th><th>名称</th><th>状态</th><th>成功</th><th>失败</th><th>总行数</th><th>最后处理</th><th>操作</th></tr></thead><tbody>` +
  tasks.map(t => {
  const s = t.stats || {};
+ const paused = t.paused;
+ const circuit = t.circuit_state || 'CLOSED';
+ const running = t.watcher_running;
+ let statusHtml = '';
+ if (!t.enabled) statusHtml = '<span class="badge badge-pending">⏸ 禁用</span>';
+ else if (circuit === 'OPEN') statusHtml = '<span class="badge badge-failed">⚡ 熔断</span>';
+ else if (paused) statusHtml = '<span class="badge badge-pending">⏸ 暂停</span>';
+ else if (!running) statusHtml = '<span class="badge badge-failed">⚠ 未运行</span>';
+ else statusHtml = '<span class="badge badge-success">● 运行</span>';
+ const btns = [];
+ if (paused) { btns.push(`<button class="btn btn-success" style="padding:5px 10px" onclick="taskAct('${t.task_id}','resume')">恢复</button>`); }
+ else { btns.push(`<button class="btn btn-warning" style="padding:5px 10px" onclick="taskAct('${t.task_id}','pause')">暂停</button>`); }
+ btns.push(`<button class="btn btn-primary" style="padding:5px 10px" onclick="taskAct('${t.task_id}','trigger')">扫描</button>`);
+ if (currentUser.role==='admin') {
+ btns.push(t.enabled
+ ? `<button class="btn btn-ghost" style="padding:5px 10px" onclick="taskAct('${t.task_id}','disable')">禁用</button>`
+ : `<button class="btn btn-ghost" style="padding:5px 10px" onclick="taskAct('${t.task_id}','enable')">启用</button>`);
+ btns.push(`<button class="btn btn-ghost" style="padding:5px 10px" onclick="openEditTask('${t.task_id}')">编辑</button>`);
+ btns.push(`<button class="btn btn-danger" style="padding:5px 10px" onclick="deleteTaskConfig('${t.task_id}')">删除</button>`);
+ }
  return `<tr>
  <td style="font-family:monospace;color:#2563eb">${t.task_id}</td>
- <td>${t.name}</td>
- <td>${t.enabled?'<span class="badge badge-success">● 运行</span>':'<span class="badge badge-pending">⏸ 禁用</span>'}</td>
+ <td>${t.name}${circuit==='OPEN'?' <span style="color:#dc2626;font-size:10px">熔断</span>':''}</td>
+ <td>${statusHtml}</td>
  <td style="color:#16a34a">${s.success??'—'}</td>
  <td style="color:#dc2626">${s.failed??'—'}</td>
  <td>${(s.total_rows||0).toLocaleString()}</td>
  <td style="color:#8e8e9a;font-size:11px">${(s.last_processed||'—').slice(0,19)}</td>
- <td style="display:flex;gap:6px;flex-wrap:wrap">
- <button class="btn btn-warning" style="padding:5px 10px" onclick="taskAct('${t.task_id}','pause')">暂停</button>
- <button class="btn btn-success" style="padding:5px 10px" onclick="taskAct('${t.task_id}','resume')">恢复</button>
- <button class="btn btn-primary" style="padding:5px 10px" onclick="taskAct('${t.task_id}','trigger')">扫描</button>
- ${currentUser.role==='admin'
- ? (t.enabled
- ? `<button class="btn btn-ghost" style="padding:5px 10px" onclick="taskAct('${t.task_id}','disable')">禁用</button>`
- : `<button class="btn btn-ghost" style="padding:5px 10px" onclick="taskAct('${t.task_id}','enable')">启用</button>`)
- : ''}
- ${currentUser.role==='admin' ? `<button class="btn btn-ghost" style="padding:5px 10px" onclick="openEditTask('${t.task_id}')">编辑</button>` : ''}
- ${currentUser.role==='admin' ? `<button class="btn btn-danger" style="padding:5px 10px" onclick="deleteTaskConfig('${t.task_id}')"></button>` : ''}
- </td>
+ <td style="display:flex;gap:6px;flex-wrap:wrap">${btns.join('')}</td>
  </tr>`;
  }).join('') + '</tbody></table>'
  : '<div class="empty">暂无任务</div>';
@@ -976,11 +992,13 @@ async function loadTasks() {
 }
 
 async function taskAct(id, action) {
+ const btns = document.querySelectorAll(`button[onclick*="taskAct('${id}'"]`);
+ btns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
  try {
  await api('POST', `/api/v1/tasks/${id}/${action}`);
- toast(`${action} → ${id}`);
- loadTasks();
+ toast(`✅ ${action} → ${id}`);
  } catch(e) { toast('操作失败：' + e.message, 'err'); }
+ loadTasks();
 }
 
 // ── 任务配置编辑器 ────────────────────────────────────────────────────

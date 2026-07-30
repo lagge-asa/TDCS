@@ -6,10 +6,12 @@ GET /api/v1/dashboard/   一次返回仪表盘所有 KPI 数据
 
 from flask import Blueprint, current_app
 from sqlalchemy import text
+import logging
 
 from ..auth import require_auth
 from ..response import ok
 
+logger = logging.getLogger(__name__)
 bp = Blueprint("dashboard", __name__)
 
 
@@ -24,6 +26,7 @@ def get_dashboard():
     # ── 任务统计 ──────────────────────────────────────────────────────────
     task_count = len(cm.config.tasks) if cm else 0
     enabled_count = sum(1 for t in cm.config.tasks if t.enabled) if cm else 0
+    paused_count = pool.paused_count() if pool else 0
 
     # ── 文件 KPI ──────────────────────────────────────────────────────────
     file_kpi = {"total": 0, "success": 0, "failed": 0, "pending": 0}
@@ -43,12 +46,14 @@ def get_dashboard():
                         file_kpi[s] = int(r["cnt"])
                     elif s in ("claimed", "processing"):
                         file_kpi["pending"] += int(r["cnt"])
+                    else:
+                        logger.warning("Dashboard: unknown file status '%s' (count=%s)", s, r["cnt"])
 
                 total_rows = conn.execute(
                     text("SELECT COALESCE(SUM(row_count),0) FROM processed_files WHERE status='SUCCESS'")
                 ).scalar() or 0
         except Exception:
-            pass
+            logger.warning("Dashboard file KPI query failed", exc_info=True)
 
     # ── 最近 10 条文件记录 ────────────────────────────────────────────────
     recent_files = []
@@ -71,7 +76,7 @@ def get_dashboard():
                 "time": str(r["processed_at"] or r["created_at"]),
             } for r in rrows]
         except Exception:
-            pass
+            logger.warning("Dashboard recent files query failed", exc_info=True)
 
     # ── Worker Pool 状态 ──────────────────────────────────────────────────
     worker_info = {}
@@ -82,7 +87,7 @@ def get_dashboard():
                 "active_workers": pool.active_count(),
             }
         except Exception:
-            pass
+            logger.warning("Dashboard worker pool query failed", exc_info=True)
 
     # ── HA 状态 ───────────────────────────────────────────────────────────
     ha_info = {"enabled": False}
@@ -94,7 +99,7 @@ def get_dashboard():
                 "instance_id": ha.instance_id if hasattr(ha, "instance_id") else None,
             }
         except Exception:
-            pass
+            logger.warning("Dashboard HA status query failed", exc_info=True)
 
     # ── DB 健康 ───────────────────────────────────────────────────────────
     db_ok = False
@@ -104,19 +109,22 @@ def get_dashboard():
                 conn.execute(text("SELECT 1"))
             db_ok = True
         except Exception:
-            pass
+            logger.warning("Dashboard DB health check failed", exc_info=True)
 
     return ok({
         "tasks": {
             "total": task_count,
             "enabled": enabled_count,
+            "paused": paused_count,
         },
         "files": {**file_kpi, "total_rows": int(total_rows)},
         "recent_files": recent_files,
-        "workers": worker_info,
+        "workers": {**worker_info,
+            "circuits_open": pool.list_open_breakers() if pool else [],
+        },
         "ha": ha_info,
         "health": {
             "db": db_ok,
-            "status": "ok" if db_ok else "degraded",
+            "status": "ok" if db_ok and not (pool and pool.list_open_breakers()) else "degraded",
         },
     })

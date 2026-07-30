@@ -42,7 +42,7 @@ class FileArchiver:
             return file_path
 
         os.makedirs(archive_dir, exist_ok=True)
-        dst = self._resolve_dst(file_path, archive_dir)
+        dst = self._resolve_dst(archive_dir, file_path)
         self._safe_move(file_path, dst)
         return dst
 

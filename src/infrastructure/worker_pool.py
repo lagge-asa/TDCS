@@ -67,7 +67,7 @@ class CircuitBreaker:
                 if time.monotonic() - self._opened_at > self.recovery_timeout:
                     self._state = CircuitState.HALF_OPEN
                     self._half_open_at = time.monotonic()
-                    self._half_open_in_progress = False
+                    self._half_open_in_progress = True
                     return True
                 return False
             # HALF_OPEN: 只允许一个试探; 超过 recovery_timeout 后重置卡死标志
@@ -105,15 +105,10 @@ class CircuitBreaker:
 
 @dataclass
 class WorkerTask:
-    """队列任务载体，替代 tuple，扩展字段时向后兼容."""
+    """队列任务载体."""
     priority: int
-    task_id: str
-    file_path: str
-    file_mtime: int
-    file_size: int
-    file_hash: str
+    ref: "FileRef"  # FileRef — 文件标识五元组
 
-    # PriorityQueue 按第一个字段排序，需支持 < 比较
     def __lt__(self, other: "WorkerTask") -> bool:
         return self.priority < other.priority
 
@@ -130,6 +125,8 @@ class WorkerPool:
         self._breaker_lock = threading.Lock()
         self._paused: set = set()
         self._paused_lock = threading.Lock()
+        self._task_queue_counts: Dict[str, int] = {}
+        self._counts_lock = threading.Lock()
         self._stop = threading.Event()
         self._workers = [
             threading.Thread(target=self._work,
@@ -148,22 +145,22 @@ class WorkerPool:
         threading.Thread(target=self._supervise,
                          daemon=True, name="WorkerSupervisor").start()
 
-    def submit(self, priority: int, task_id: str, file_path: str,
-               file_mtime: int, file_size: int, file_hash: str,
+    def submit(self, ref: "FileRef", priority: int = 5,
                is_active: bool = True) -> SubmitResult:
         if not is_active:
             return SubmitResult.REJECTED_HA_STANDBY
         with self._paused_lock:
-            paused = task_id in self._paused
+            paused = ref.task_id in self._paused
         if paused:
             return SubmitResult.REJECTED_TASK_PAUSED
-        breaker = self._get_breaker(task_id)
+        breaker = self._get_breaker(ref.task_id)
         if not breaker.allow():
             return SubmitResult.REJECTED_CIRCUIT_OPEN
         try:
-            self._queue.put_nowait(
-                WorkerTask(priority, task_id, file_path,
-                           file_mtime, file_size, file_hash))
+            self._queue.put_nowait(WorkerTask(priority, ref))
+            with self._counts_lock:
+                self._task_queue_counts[ref.task_id] = \
+                    self._task_queue_counts.get(ref.task_id, 0) + 1
             return SubmitResult.QUEUED
         except queue.Full:
             return SubmitResult.QUEUE_FULL
@@ -175,6 +172,35 @@ class WorkerPool:
     def resume_task(self, task_id: str) -> None:
         with self._paused_lock:
             self._paused.discard(task_id)
+
+    def is_task_paused(self, task_id: str) -> bool:
+        with self._paused_lock:
+            return task_id in self._paused
+
+    def paused_count(self) -> int:
+        with self._paused_lock:
+            return len(self._paused)
+
+    def get_breaker_state(self, task_id: str) -> str:
+        """返回熔断器状态：CLOSED/OPEN/HALF_OPEN，无 breaker 返回 CLOSED."""
+        breaker = self._get_breaker(task_id)
+        return breaker.state.value
+
+    def list_open_breakers(self) -> list:
+        """返回所有熔断器 OPEN 的任务 ID 列表."""
+        with self._breaker_lock:
+            return [tid for tid, b in self._breakers.items()
+                    if b.state.value == "OPEN"]
+
+    def queue_backlog(self, task_id: str) -> int:
+        """返回指定任务在队列中的待处理文件数."""
+        with self._counts_lock:
+            return self._task_queue_counts.get(task_id, 0)
+
+    def remove_breaker(self, task_id: str) -> None:
+        """清理已删除任务的熔断器，防止内存泄漏."""
+        with self._breaker_lock:
+            self._breakers.pop(task_id, None)
 
     def active_count(self) -> int:
         """当前存活的 worker 线程数."""
@@ -210,11 +236,9 @@ class WorkerPool:
                 task: WorkerTask = self._queue.get(timeout=1)
             except queue.Empty:
                 continue
-            breaker = self._get_breaker(task.task_id)
+            breaker = self._get_breaker(task.ref.task_id)
             try:
-                self._process_fn(
-                    task.task_id, task.file_path, task.file_mtime,
-                    task.file_size, task.file_hash, breaker)
+                self._process_fn(task.ref, breaker)
             except SkipFileError:
                 pass  # 预期跳过，不计入熔断
             except Exception as e:
@@ -222,6 +246,10 @@ class WorkerPool:
                 breaker.record_failure()
             finally:
                 self._queue.task_done()
+                with self._counts_lock:
+                    tid = task.ref.task_id
+                    if self._task_queue_counts.get(tid, 0) > 0:
+                        self._task_queue_counts[tid] -= 1
 
     def _supervise(self) -> None:
         """检测死亡 Worker 并重启，带退避保护."""

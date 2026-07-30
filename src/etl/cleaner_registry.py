@@ -24,27 +24,19 @@ logger = logging.getLogger(__name__)
 _EXCLUDE = {"__init__", "__pycache__", "conftest", "setup"}
 
 
-def _extract_docstring(path: Path) -> str:
-    """安全读取模块级 docstring，不执行代码。"""
+def _analyze_template(path: Path) -> tuple:
+    """安全静态分析模板文件，返回 (docstring, has_clean_data_func)，不执行代码。"""
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
         tree = ast.parse(source)
-        return ast.get_docstring(tree) or ""
+        docstring = ast.get_docstring(tree) or ""
+        has_func = any(
+            isinstance(node, ast.FunctionDef) and node.name == "clean_data"
+            for node in ast.walk(tree)
+        )
+        return docstring, has_func
     except Exception:
-        return ""
-
-
-def _has_clean_data_func(path: Path) -> bool:
-    """静态检查文件是否包含 def clean_data(...) 函数定义。"""
-    try:
-        source = path.read_text(encoding="utf-8", errors="replace")
-        tree = ast.parse(source)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "clean_data":
-                return True
-        return False
-    except Exception:
-        return False
+        return "", False
 
 
 class TemplateInfo:
@@ -64,8 +56,8 @@ class TemplateInfo:
     def _refresh(self):
         try:
             self.mtime = self.path.stat().st_mtime
-            self.description = _extract_docstring(self.path)
-            if _has_clean_data_func(self.path):
+            self.description, has_func = _analyze_template(self.path)
+            if has_func:
                 self.valid = True
                 self.error = ""
             else:

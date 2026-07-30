@@ -11,8 +11,7 @@ from flask import Blueprint, request, current_app
 from sqlalchemy import text
 
 from ..auth import require_auth
-from ..response import ok, error, paginated
-from ..pagination import get_pagination
+from ..response import ok, error, get_pagination, paginated
 
 bp = Blueprint("files", __name__)
 
@@ -29,6 +28,8 @@ def _file_row_to_dict(r, full=False) -> dict:
         "valid_row_count": r["valid_row_count"],
         "retry_count": r["retry_count"],
         "error_type": r["error_type"],
+        "claimed_by": r.get("claimed_by"),
+        "claim_expires_at": str(r.get("claim_expires_at")) if r.get("claim_expires_at") else None,
         "processing_time_ms": r["processing_time_ms"],
         "created_at": str(r["created_at"]) if r["created_at"] else None,
         "processed_at": str(r["processed_at"]) if r.get("processed_at") else None,
@@ -71,6 +72,7 @@ def list_files():
         rows = conn.execute(text(f"""
             SELECT id, task_id, file_name, file_path, file_size, status,
                    row_count, valid_row_count, retry_count, error_type,
+                   claimed_by, claim_expires_at, archive_path,
                    processing_time_ms, created_at, processed_at
             FROM processed_files {where}
             ORDER BY created_at DESC
@@ -122,8 +124,9 @@ def get_file(file_id: int):
         row = conn.execute(text("""
             SELECT id, task_id, file_name, file_path, file_size, file_hash,
                    status, row_count, valid_row_count, retry_count,
-                   error_type, error_message, processing_time_ms,
-                   archive_path, instance_id, created_at, processed_at
+                   error_type, error_message, claimed_by, claim_expires_at,
+                   processing_time_ms, archive_path, instance_id,
+                   created_at, processed_at
             FROM processed_files
             WHERE id = :id
         """), {"id": file_id}).mappings().first()

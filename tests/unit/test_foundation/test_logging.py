@@ -49,9 +49,9 @@ def test_setup_logging_creates_file(tmp_path):
 
 def test_log_rotation_config(tmp_path):
     """验证 RotatingFileHandler 配置正确 (10MB, 5 份)."""
+    import logging.handlers
     setup_logging(log_dir=str(tmp_path))
     root = logging.getLogger()
-    import logging.handlers
     rotating = [
         h for h in root.handlers
         if isinstance(h, logging.handlers.RotatingFileHandler)

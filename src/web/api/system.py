@@ -47,6 +47,23 @@ bp = Blueprint("system", __name__)
 def health():
     """无需认证：检查服务及 DB 连通性，供 k8s readiness probe 使用."""
     db = current_app.config.get("db")
+    pool = current_app.config.get("worker_pool")
+    result = {"status": "ok"}
+
+    if pool:
+        alive = pool.active_count()
+        result["workers"] = {
+            "alive": alive,
+            "paused_tasks": pool.paused_count(),
+        }
+        open_breakers = pool.list_open_breakers()
+        if open_breakers:
+            result["circuits_open"] = open_breakers
+            result["status"] = "degraded"
+        if alive == 0:
+            result["status"] = "degraded"
+            result["workers"]["warning"] = "all workers dead"
+
     if db:
         try:
             from sqlalchemy import text
@@ -54,8 +71,11 @@ def health():
                 conn.execute(text("SELECT 1"))
         except Exception as e:
             logger.warning("Health check DB failed: %s", e)
-            return ok({"status": "degraded", "db": "connection failed"}, status=503)
-    return ok({"status": "ok"})
+            result["status"] = "degraded"
+            result["db"] = "connection failed"
+
+    http_status = 503 if result["status"] != "ok" else 200
+    return ok(result, status=http_status)
 
 
 @bp.get("/metrics")

@@ -14,6 +14,7 @@ import time
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
+from itertools import zip_longest
 from typing import Optional
 
 from .exceptions import RetryableError, FatalError, SkipFileError
@@ -57,8 +58,6 @@ class ETLPipeline:
         self.loader = loader
         self.encryption = encryption
         self.quality_reporter = quality_reporter
-        # 进程级缓存：已确认存在的表名，避免每 batch 都获取 table_router 内部锁
-        self._known_tables: set = set()
 
     def execute(self, file_path: str, task_config) -> PipelineResult:
         result = PipelineResult(status=PipelineStatus.SUCCESS)
@@ -76,7 +75,6 @@ class ETLPipeline:
                         task_config.transformer_module,
                         task_config.transformer_function,
                         timeout=task_config.sandbox_timeout,
-                        memory_mb=task_config.sandbox_memory_mb,
                     )
                 else:
                     transformed = batch
@@ -88,12 +86,15 @@ class ETLPipeline:
                         len(transformed), len(batch), task_config.task_id)
 
                 # None 行视为过滤掉 (错误行)
+                # 使用 zip_longest 防止 transform 返回行数少于 batch 时静默丢数据
                 valid = []
-                for orig, out in zip(batch, transformed):
+                for orig, out in zip_longest(batch, transformed):
                     if out is not None:
                         valid.append(out)
                     else:
-                        error_rows.append(orig)
+                        # out 为 None（被过滤）或缺失（transformed 更短）均记入错误行
+                        if orig is not None:
+                            error_rows.append(orig)
 
                 result.valid_count += len(valid)
                 result.error_count += len(batch) - len(valid)
@@ -109,11 +110,7 @@ class ETLPipeline:
                 # Route & Load
                 grouped = self.table_router.group_by_table(valid, task_config)
                 for table_name, rows in grouped.items():
-                    # 进程级 set 命中则跳过锁，首次 miss 才委托 table_router
-                    if table_name not in self._known_tables:
-                        self.table_router.ensure_table_exists(
-                            table_name, task_config)
-                        self._known_tables.add(table_name)
+                    self.table_router.ensure_table_exists(table_name, task_config)
                     self._load_with_retry(table_name, rows)
 
         except SkipFileError as e:
@@ -143,11 +140,18 @@ class ETLPipeline:
         try:
             self.loader.load_batch(table_name, rows)
         except Exception as e:
-            # 识别 MySQL 瞬时错误（连接断开、死锁）-> RetryableError
+            # 识别 MySQL 瞬时错误（连接断开、死锁、连接数超限）-> RetryableError
             err_str = str(e)
-            errno = getattr(e, "orig", None)
-            if errno is not None:
-                errno = getattr(errno, "args", [None])[0]
+            # 尝试从 SQLAlchemy DBAPIError 中提取底层错误码
+            errno = None
+            try:
+                from sqlalchemy.exc import OperationalError, InternalError
+                if isinstance(e, (OperationalError, InternalError)):
+                    orig = getattr(e, "orig", None)
+                    if orig is not None:
+                        errno = getattr(orig, "args", [None])[0]
+            except Exception:
+                pass
             if (errno in _MYSQL_RETRYABLE_ERRCODE
                     or "gone away" in err_str.lower()
                     or "deadlock" in err_str.lower()

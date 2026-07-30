@@ -10,8 +10,6 @@ import os
 import threading
 import time
 
-from ..utils.file_hash import quick_hash
-
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +22,7 @@ class PollingScanner:
         self._pool = worker_pool
         self._last_scan_mtime: float = 0.0
         self._mtime_lock = threading.Lock()
+        self._scan_lock = threading.Lock()  # 防止 scan_now() 和 _loop 并发扫描
         self._stop = threading.Event()
         self._thread: threading.Thread = None
 
@@ -52,6 +51,10 @@ class PollingScanner:
             self._stop.wait(self._cfg.poll_interval)
 
     def _scan(self) -> None:
+        with self._scan_lock:
+            self._scan_impl()
+
+    def _scan_impl(self) -> None:
         folder = self._cfg.monitor_folder
         exts = self._cfg.file_extensions
         incremental = self._cfg.poll_incremental
@@ -80,15 +83,9 @@ class PollingScanner:
                     self._cfg.task_id, fpath, file_mtime)
                 if db_status == 'SUCCESS':
                     continue
-                file_hash = quick_hash(fpath, stat.st_size)
-                self._pool.submit(
-                    priority=getattr(self._cfg, 'priority', 5),
-                    task_id=self._cfg.task_id,
-                    file_path=fpath,
-                    file_mtime=file_mtime,
-                    file_size=stat.st_size,
-                    file_hash=file_hash,
-                )
+                from ..infrastructure.file_ref import FileRef
+                ref = FileRef.from_stat(self._cfg.task_id, fpath, stat)
+                self._pool.submit(ref, priority=getattr(self._cfg, 'priority', 5))
                 found += 1
 
         with self._mtime_lock:

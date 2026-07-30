@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TDCS API 文档 — Swagger UI</title>
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css">
+  <style>
+    html{box-sizing:border-box;overflow-y:scroll}*,*:before,*:after{box-sizing:inherit}
+    body{margin:0;background:#fafafa}
+    .swagger-ui .topbar{background-color:#1a1a2e}
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.bootcdn.net/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js" crossorigin></script>
+  <script>
+    SwaggerUIBundle({
+      url:"/openapi.json",dom_id:"#swagger-ui",deepLinking:true,
+      presets:[SwaggerUIBundle.presets.apis,SwaggerUIStandalonePreset],
+      layout:"StandaloneLayout",defaultModelsExpandDepth:-1,
+      docExpansion:"list",filter:true,tryItOutEnabled:true
+    });
+  </script>
+</body>
+</html>

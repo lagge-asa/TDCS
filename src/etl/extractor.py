@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 # chardet 置信度低于此阈值时 fallback 到 utf-8
 _MIN_CHARDET_CONFIDENCE = 0.5
 
+# 格式注册表：扩展名 → (streamer_method, description)
+_FORMAT_REGISTRY = {
+    ".csv": ("csv", "CSV"),
+    ".json": ("json", "JSON"),
+    ".xlsx": ("excel", "Excel"),
+    ".xls": ("excel", "Excel"),
+}
+
 
 class StreamingExtractor:
     def stream(self, file_path: str, task_config: Any) -> Iterator[List[dict]]:
@@ -35,18 +43,21 @@ class StreamingExtractor:
             raise SkipFileError(f"Empty file: {file_path}")
 
         ext = Path(file_path).suffix.lower()
+        entry = _FORMAT_REGISTRY.get(ext)
+        if not entry:
+            raise SkipFileError(f"Unsupported format: {ext}")
+
+        fmt, _ = entry
         batch_size = task_config.batch_size
         encoding = self._detect_encoding(file_path, task_config.encoding)
 
-        if ext == ".csv":
+        if fmt == "csv":
             yield from self._stream_csv(file_path, encoding, batch_size)
-        elif ext == ".json":
+        elif fmt == "json":
             json_path = getattr(task_config, "json_path", "item")
             yield from self._stream_json(file_path, batch_size, json_path)
-        elif ext in (".xlsx", ".xls"):
-            yield from self._stream_excel(file_path, batch_size)
         else:
-            raise SkipFileError(f"Unsupported format: {ext}")
+            yield from self._stream_excel(file_path, batch_size)
 
     def _detect_encoding(self, file_path: str, hint: str) -> str:
         """检测文件编码.

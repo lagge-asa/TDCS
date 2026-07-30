@@ -5,7 +5,6 @@ ETL 服务异常分类体系
 - RetryableError：可重试（网络/DB临时故障），按退避策略重试
 - FatalError：不可重试（数据格式错误/清洗代码异常），进死信目录
 - SkipFileError：跳过（空文件/重复文件），标记 SKIPPED
-- DataQualityError：单行数据格式错误，根据 on_row_error 配置决定跳过或回滚
 - ConfigValidationError：配置校验失败，拒绝热加载，保留旧配置
 - SandboxError：清洗代码执行失败（语法错误/超时/非法返回值）
 """
@@ -34,13 +33,6 @@ class FatalError(ETLError):
 class SkipFileError(ETLError):
     """跳过文件：空文件、格式不支持、已处理
     → 标记 SKIPPED，不重试，不入死信
-    """
-    pass
-
-
-class DataQualityError(ETLError):
-    """单行数据格式错误
-    → 根据 on_row_error 配置决定跳过（skip）或回滚（abort）
     """
     pass
 

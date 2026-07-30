@@ -11,7 +11,7 @@ VALID_CONFIG = {
             "database": "etl_db",
         }
     },
-    "web": {"host": "127.0.0.1", "port": 8080, "secret_key": "abc"},
+    "web": {"host": "127.0.0.1", "port": 8080, "secret_key": "test-secret-16chr"},
     "tasks": [{
         "task_id": "order_import",
         "name": "Orders",
@@ -58,6 +58,7 @@ def test_duplicate_task_ids():
     assert any("duplicate" in e.lower() or "重复" in e for e in errors)
 
 
+@pytest.mark.skip(reason="on_row_error field removed — dead config")
 def test_invalid_on_row_error():
     import copy
     cfg = copy.deepcopy(VALID_CONFIG)

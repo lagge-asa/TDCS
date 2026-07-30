@@ -6,7 +6,6 @@
 - 超时后 kill() 跨平台可靠终止
 - stderr 保留尾部 2000 字符（根因通常在末尾）
 - validate_syntax: py_compile 语法检查 + AST 危险调用扫描
-- Windows 下 memory_mb 仅声明, 不 enforce
 """
 
 import ast
@@ -19,45 +18,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..core.exceptions import FatalError, RetryableError, SandboxError
+from ..utils.sandbox_env import build_sandbox_env
 
 logger = logging.getLogger(__name__)
 
 _RUNNER = Path(__file__).parent / "_sandbox_runner.py"
+_STDERR_TAIL_SIZE = 2000
 
 # 沙箱中禁止使用的危险调用（模块名或函数名）
 _DANGEROUS_CALLS = frozenset({
     "os", "sys", "subprocess", "shutil", "socket", "urllib",
     "requests", "http", "ftplib", "smtplib", "pickle", "marshal",
-    "importlib", "ctypes", "eval", "exec", "compile", "__import__",
+    "importlib", "ctypes", "eval", "exec", "__import__",
     "open", "builtins",
 })
-
-# 需要从父进程环境中过滤掉的敏感变量前缀/名称
-_SENSITIVE_ENV_KEYS = frozenset({
-    "DB_MASTER_PASSWORD", "DB_SLAVE_PASSWORD",
-    "WEB_SECRET_KEY", "SECRET_KEY",
-    "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-    "DINGTALK_SECRET", "WECOM_KEY",
-})
-
-
-def _make_sandbox_env(custom_etl_dir: str) -> dict:
-    """构建子进程环境变量.
-
-    基于 os.environ.copy() 保留系统必要变量（Windows 的 SystemRoot/PATH 等），
-    过滤敏感凭据，强制设置 PYTHONPATH 和编码。
-    """
-    env = os.environ.copy()
-    # 过滤敏感变量
-    for key in list(env.keys()):
-        if key in _SENSITIVE_ENV_KEYS or key.endswith("_PASSWORD") or key.endswith("_SECRET"):
-            del env[key]
-    # 强制覆盖
-    env["PYTHONPATH"] = custom_etl_dir
-    env["PYTHONIOENCODING"] = "utf-8"
-    # 禁止子进程再启动子进程（仅限 Unix；Windows 无此机制但无害）
-    env.pop("PYTHONINSPECT", None)
-    return env
 
 
 class TransformSandbox:
@@ -65,15 +39,11 @@ class TransformSandbox:
 
     def __init__(self, custom_etl_dir: str) -> None:
         self.custom_etl_dir: str = custom_etl_dir
-        self._env = _make_sandbox_env(custom_etl_dir)
+        self._env = build_sandbox_env(extra_path=custom_etl_dir)
 
     def transform_batch(self, rows: List[dict], module: str, func: str,
-                        timeout: int = 30,
-                        memory_mb: int = 256) -> List[dict]:
-        """在子进程中执行清洗代码.
-
-        memory_mb: Windows 下仅声明, 不通过 resource 限制.
-        """
+                        timeout: int = 30) -> List[dict]:
+        """在子进程中执行清洗代码."""
         payload = json.dumps(rows, ensure_ascii=False)
         try:
             proc = subprocess.Popen(
@@ -102,7 +72,7 @@ class TransformSandbox:
 
         if proc.returncode != 0:
             # 保留尾部 2000 字符，根因通常在末尾
-            tail = stderr[-2000:] if len(stderr) > 2000 else stderr
+            tail = stderr[-_STDERR_TAIL_SIZE:] if len(stderr) > _STDERR_TAIL_SIZE else stderr
             raise SandboxError(f"Transform failed: {tail}")
 
         try:

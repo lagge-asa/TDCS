@@ -25,6 +25,7 @@ from flask import Blueprint, Response, current_app, request, send_file
 
 from ..auth import require_auth
 from ..response import ok, error
+from ...utils.sandbox_env import build_sandbox_env
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("cleaners", __name__)
@@ -33,33 +34,13 @@ bp = Blueprint("cleaners", __name__)
 _DOWNLOAD_TTL = 1800  # 30分钟
 # 运行时上传文件大小限制
 _MAX_UPLOAD_MB = 20
+_MAX_UPLOAD_BYTES = _MAX_UPLOAD_MB * 1024 * 1024
 
 # 内存中暂存下载任务 {token: (csv_bytes, filename, expire_ts)}
 _download_store: dict = {}
 _download_lock = threading.Lock()  # 保护 _download_store 多线程并发读写
 
 _CLEANER_RUNNER = Path(__file__).parent.parent.parent / "etl" / "_cleaner_runner.py"
-
-# 敏感环境变量关键词（用 'in' 包含检查，覆盖前缀/中缀/后缀）
-_SENSITIVE_KEYWORDS = (
-    "ETL_", "SECRET", "PASSWORD", "PASSWD", "TOKEN",
-    "API_KEY", "APIKEY", "AWS_", "ENCRYPTION", "PRIVATE",
-    "CREDENTIAL", "DB_PASS", "MYSQL_", "REDIS_PASS",
-)
-
-
-def _build_subprocess_env() -> dict:
-    """构建子进程环境变量：保留 Windows 系统必要变量，过滤敏感凭证。"""
-    env = {}
-    for k, v in os.environ.items():
-        upper = k.upper()
-        if any(kw in upper for kw in _SENSITIVE_KEYWORDS):
-            continue
-        env[k] = v
-    # 确保 Python 子进程能正确编码
-    env["PYTHONIOENCODING"] = "utf-8"
-    return env
-
 
 # 防止 Flask reloader / pytest import 时重复启动后台线程
 _purge_thread_started = False
@@ -103,7 +84,7 @@ def _run_cleaner_subprocess(script_path: Path, file_bytes: bytes,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env=_build_subprocess_env(),
+        env=build_sandbox_env(keep_system_vars=False),
         text=True,
         encoding="utf-8",
     )
@@ -202,12 +183,12 @@ def run_cleaner():
 
     # 文件大小限制：先检查 content_length 再读入内存，超限直接拒绝
     content_length = request.content_length or 0
-    if content_length > _MAX_UPLOAD_MB * 1024 * 1024:
+    if content_length > _MAX_UPLOAD_BYTES:
         return error("FILE_TOO_LARGE", f"文件超过 {_MAX_UPLOAD_MB}MB 限制", status=413)
 
     file_bytes = uploaded.read()
     # 再次检查实际读取大小（content_length 可能不可信或为零）
-    if len(file_bytes) > _MAX_UPLOAD_MB * 1024 * 1024:
+    if len(file_bytes) > _MAX_UPLOAD_BYTES:
         return error("FILE_TOO_LARGE", f"文件超过 {_MAX_UPLOAD_MB}MB 限制", status=413)
 
     # 检测格式
@@ -307,6 +288,8 @@ def download_result(token: str):
 @require_auth("operator")
 def validate_cleaner(name: str):
     """语法检查：检查脚本是否包含 clean_data 函数且语法正确。"""
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+        return error("INVALID_NAME", "模板名称只能包含字母、数字和下划线，且不能以数字开头", status=400)
     data = request.get_json() or {}
     code = data.get("code", "")
     if not code:
@@ -367,6 +350,8 @@ def create_cleaner():
 @require_auth("operator")
 def update_cleaner(name: str):
     """更新清洗模板代码。"""
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+        return error("INVALID_NAME", "模板名称只能包含字母、数字和下划线，且不能以数字开头", status=400)
     data = request.get_json() or {}
     code = data.get("code", "")
     if not code:
@@ -393,6 +378,8 @@ def update_cleaner(name: str):
 @require_auth("admin")
 def delete_cleaner(name: str):
     """删除清洗模板。"""
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+        return error("INVALID_NAME", "模板名称只能包含字母、数字和下划线，且不能以数字开头", status=400)
     reg = _get_registry()
     fpath = os.path.join(reg.get_templates_dir(), f"{name}.py")
     if not os.path.exists(fpath):

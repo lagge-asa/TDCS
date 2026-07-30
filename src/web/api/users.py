@@ -10,6 +10,7 @@ GET    /api/v1/users/me            查看当前用户信息（任意已登录）
 """
 
 import json
+import logging
 import re
 import bcrypt
 from flask import Blueprint, request, current_app
@@ -17,6 +18,8 @@ from sqlalchemy import text
 
 from ..auth import require_auth
 from ..response import ok, error
+
+logger = logging.getLogger(__name__)
 
 # 用户名只允许字母、数字、下划线、连字符，长度 3-32
 _USERNAME_RE = re.compile(r'^[a-zA-Z0-9_-]{3,32}$')

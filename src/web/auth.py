@@ -11,7 +11,7 @@ from functools import wraps
 from typing import Any, Callable, TypeVar
 
 import jwt
-from flask import request, current_app
+from flask import request, current_app, jsonify
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def require_auth(min_role: str = "viewer") -> Callable[[F], F]:
         def wrapper(*args, **kwargs):
             auth = request.headers.get("Authorization", "")
             if not auth.startswith("Bearer "):
-                return {"success": False, "error": {"code": "MISSING_TOKEN", "message": "Missing token"}}, 401
+                return jsonify({"success": False, "error": {"code": "MISSING_TOKEN", "message": "Missing token"}}), 401
             token = auth[7:]
             try:
                 payload = jwt.decode(
@@ -53,13 +53,13 @@ def require_auth(min_role: str = "viewer") -> Callable[[F], F]:
                     algorithms=["HS256"],
                 )
             except jwt.ExpiredSignatureError:
-                return {"success": False, "error": {"code": "TOKEN_EXPIRED", "message": "Token expired"}}, 401
+                return jsonify({"success": False, "error": {"code": "TOKEN_EXPIRED", "message": "Token expired"}}), 401
             except jwt.InvalidTokenError:
-                return {"success": False, "error": {"code": "TOKEN_INVALID", "message": "Invalid token"}}, 401
+                return jsonify({"success": False, "error": {"code": "TOKEN_INVALID", "message": "Invalid token"}}), 401
 
             user_role = payload.get("role", "viewer")
             if ROLE_LEVELS.get(user_role, 0) < ROLE_LEVELS.get(min_role, 0):
-                return {"success": False, "error": {"code": "FORBIDDEN", "message": "Insufficient permissions"}}, 403
+                return jsonify({"success": False, "error": {"code": "FORBIDDEN", "message": "Insufficient permissions"}}), 403
 
             request.current_user = payload
             return fn(*args, **kwargs)

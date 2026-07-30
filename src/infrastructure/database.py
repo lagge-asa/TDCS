@@ -2,7 +2,7 @@
 数据库连接池
 
 - master_conn(): 写操作 (INSERT/UPDATE/DELETE)
-- slave_conn():  读操作 (SELECT), 等同于 master_conn()
+- read_conn():   读操作 (SELECT), 当前等同于 master_conn()（单实例模式）
 - 连接池由 SQLAlchemy create_engine 管理
 
 优化:
@@ -20,8 +20,6 @@ from sqlalchemy.pool import QueuePool
 
 if TYPE_CHECKING:
     from ..core.config_models import AppConfig
-
-from ..core.exceptions import RetryableError
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +51,12 @@ class DatabaseManager:
                     pass
                 raise exc
 
-    def slave_conn(self):
-        """获取读连接，等同于 master_conn()."""
+    def read_conn(self):
+        """获取读连接，当前等同于 master_conn()（单实例模式）."""
         return self.master_conn()
+
+    # 向后兼容别名，逐步迁移到 read_conn()
+    slave_conn = read_conn
 
     def dispose(self) -> None:
         """关闭连接池."""

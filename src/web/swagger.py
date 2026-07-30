@@ -207,7 +207,7 @@ _SPEC = {
                 "responses": {"200": {"description": "用户列表"}},
             }
         },
-        "/api/v1/audit/": {
+        "/api/v1/audit-logs/": {
             "get": {
                 "tags": ["审计日志"],
                 "summary": "获取审计日志",
@@ -243,47 +243,7 @@ def openapi_spec():
 @bp.get("/docs")
 def swagger_ui():
     """Swagger UI 交互式 API 文档."""
-    return """
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <title>TDCS API 文档 — Swagger UI</title>
-  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css">
-  <style>
-    html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
-    *, *:before, *:after { box-sizing: inherit; }
-    body { margin: 0; background: #fafafa; }
-    .swagger-ui .topbar { background-color: #1a1a2e; }
-    .swagger-ui .topbar .download-url-wrapper .select-label { color: #e2e8f0; }
-    .swagger-ui .topbar a { color: #38bdf8; }
-    .swagger-ui .info .title { color: #0f172a; }
-    .swagger-ui .scheme-container { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-    .swagger-ui .opblock-tag { color: #0f172a; }
-    .swagger-ui .opblock.opblock-get { background: rgba(97,175,254,.1); border-color: #61affe; }
-    .swagger-ui .opblock.opblock-post { background: rgba(73,204,144,.1); border-color: #49cc90; }
-    .swagger-ui .opblock.opblock-put { background: rgba(252,161,48,.1); border-color: #fca130; }
-    .swagger-ui .btn.authorize { background: #38bdf8; border-color: #38bdf8; color: #fff; }
-    .swagger-ui .btn.authorize:hover { background: #0ea5e9; }
-    .swagger-ui .btn.authorize svg { fill: #fff; }
-  </style>
-</head>
-<body>
-  <div id="swagger-ui"></div>
-  <script src="https://cdn.bootcdn.net/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js" crossorigin></script>
-  <script>
-    SwaggerUIBundle({
-      url: "/openapi.json",
-      dom_id: "#swagger-ui",
-      deepLinking: true,
-      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-      layout: "StandaloneLayout",
-      defaultModelsExpandDepth: -1,
-      docExpansion: "list",
-      filter: true,
-      tryItOutEnabled: true,
-    });
-  </script>
-</body>
-</html>
-"""
+    from flask import send_file
+    from pathlib import Path
+    html = Path(__file__).parent / "static" / "swagger.html"
+    return send_file(str(html)) if html.exists() else "Swagger UI not found", 404

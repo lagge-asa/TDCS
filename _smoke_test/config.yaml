@@ -1,0 +1,78 @@
+service:
+  instance_id: smoke_test_1
+  log_level: DEBUG
+
+database:
+  master:
+    host: 127.0.0.1
+    port: 3306
+    user: etl_user
+    password: etl_dev_pass
+    database: etl_db
+    pool_size: 3
+    pool_timeout: 30
+    pool_recycle: 3600
+    connect_timeout: 10
+
+web:
+  host: 127.0.0.1
+  port: 8500
+  secret_key: smoke-test-secret-key-16chars
+  token_expire_hours: 8
+  rate_limit: "200 per minute"
+  server: waitress
+  threads: 2
+
+concurrency:
+  worker_threads: 2
+  queue_maxsize: 500
+
+monitoring:
+  prometheus:
+    enabled: false
+  alerting:
+    enabled: false
+    channels: []
+    rules:
+      failed_files_threshold: 100
+      quality_score_min: 80.0
+      queue_size_max: 400
+
+tasks:
+  - task_id: smoke_import
+    name: "Smoke Test Import"
+    enabled: true
+    priority: 1
+    monitor:
+      folder_path: _smoke_test/input
+      file_extensions: [".csv"]
+      recursive: false
+      debounce_seconds: 1
+      stability_check_interval: 0.5
+      stability_check_count: 2
+    etl:
+      extractor: csv
+      encoding: utf-8
+      batch_size: 500
+      transformer_module: test_clean
+      transformer_function: clean_data
+      sandbox_timeout: 30
+    table:
+      base_table: smoke_data
+      partition_field: date
+      partition_field_format: "%Y-%m-%d"
+      create_table_template: sql_templates/smoke_test.sql
+      retention_months: 12
+      archive_old_tables: true
+    error_handling:
+      max_retries: 3
+      retry_backoff: [5, 30, 120]
+      dead_letter_dir: _smoke_test/dead
+    archive:
+      mode: move
+      archive_dir: _smoke_test/archive
+      compress_after_days: 0
+      cleanup_after_days: 0
+    schedule:
+      poll_interval: 10
+      poll_incremental: true

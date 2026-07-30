@@ -59,14 +59,28 @@ def _validate_webhook_url(url: str) -> None:
     except ValueError:
         pass  # 不是 IP 地址，继续域名白名单检查
     if not _ALLOWED_WEBHOOK_DOMAINS.search(hostname):
-        logger.warning("Webhook domain not in allowlist: %s", hostname)
+        raise ValueError(f"Webhook domain not in allowlist: {hostname}")
 
 
 def _sign_payload(payload: bytes, secret: str) -> str:
-    """HMAC-SHA256 签名，用于 webhook 接收端验证消息真伪."""
+    """HMAC-SHA256 签名，通用 hex 格式（用于 X-Signature 头）."""
     return hmac.new(
         secret.encode(), payload, hashlib.sha256
     ).hexdigest()
+
+
+def _dingtalk_sign(secret: str) -> tuple:
+    """钉钉加签：timestamp + '\n' + secret → HMAC-SHA256 → Base64.
+    返回 (timestamp, sign) 用于 URL 查询参数。"""
+    import time as _time
+    timestamp = str(round(_time.time() * 1000))
+    sign = hmac.new(
+        secret.encode(),
+        f"{timestamp}\n{secret}".encode(),
+        hashlib.sha256,
+    ).digest()
+    import base64
+    return timestamp, base64.b64encode(sign).decode()
 
 
 def _sanitize_path(file_path: str) -> str:
@@ -103,13 +117,40 @@ class WebhookChannel(AlertChannel):
             {"title": title, "message": message, "level": level}
         ).encode()
         headers = {"Content-Type": "application/json"}
-        if self._secret:
+        if self._secret and not self._is_wecom:
             headers["X-Signature"] = _sign_payload(payload, self._secret)
         req = urllib.request.Request(
             self._url,
             data=payload,
             headers=headers,
         )
+        urllib.request.urlopen(req, timeout=10)
+
+
+class DingTalkChannel(AlertChannel):
+    """钉钉自定义机器人通道，支持加签和 markdown 消息."""
+
+    def __init__(self, cfg):
+        _validate_webhook_url(cfg.webhook)
+        self._url = cfg.webhook
+        self._secret: str = getattr(cfg, 'secret', '')
+
+    def send(self, title: str, message: str, level: str = "warning") -> None:
+        url = self._url
+        if self._secret:
+            timestamp, sign = _dingtalk_sign(self._secret)
+            sep = '&' if '?' in url else '?'
+            url = f"{url}{sep}timestamp={timestamp}&sign={sign}"
+        level_emoji = {"error": "🚨", "warning": "⚠️", "info": "ℹ️"}.get(level, "📢")
+        payload = json.dumps({
+            "msgtype": "markdown",
+            "markdown": {
+                "title": title,
+                "text": f"## {level_emoji} {title}\n\n{message}\n\n> ETL Service Alert"
+            }
+        }).encode()
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(url, data=payload, headers=headers)
         urllib.request.urlopen(req, timeout=10)
 
 
@@ -120,6 +161,7 @@ class WebhookChannel(AlertChannel):
 _CHANNEL_TYPES = {
     "webhook": WebhookChannel,
     "wecom":   WebhookChannel,  # 企业微信，通过 type 字段自动切换 payload 格式
+    "dingtalk": DingTalkChannel,  # 钉钉自定义机器人，支持加签 + markdown
 }
 
 

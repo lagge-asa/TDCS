@@ -7,6 +7,7 @@ PUT  /api/v1/config/reload   热重载配置（admin，写审计日志）
 
 import json
 import os
+import threading
 import yaml
 from flask import Blueprint, request, current_app
 from sqlalchemy import text
@@ -16,12 +17,17 @@ from ..response import ok, error
 
 bp = Blueprint("config_api", __name__)
 
+# 保护 config.yaml 并发读写（读→改→写→重载序列）
+_config_lock = threading.Lock()
+
 
 @bp.get("/")
 @require_auth("viewer")
 def get_config():
     cm = current_app.config["config_manager"]
     cfg = cm.config
+    pool = current_app.config.get("worker_pool")
+    tm = current_app.config.get("task_manager")
     return ok({
         "instance_id": cfg.instance_id,
         "log_level": cfg.log_level,
@@ -50,6 +56,9 @@ def get_config():
                 "task_id": t.task_id,
                 "name": t.name,
                 "enabled": t.enabled,
+                "paused": pool.is_task_paused(t.task_id) if pool else False,
+                "circuit_state": pool.get_breaker_state(t.task_id) if pool else "CLOSED",
+                "watcher_running": tm.is_running(t.task_id) if tm else False,
                 "monitor_folder": t.monitor_folder,
                 "file_extensions": list(t.file_extensions),
                 "extractor": t.extractor,
@@ -151,7 +160,8 @@ def create_task():
     task_id = task_data.get("task_id", "").strip()
     if not task_id:
         return error("MISSING_FIELD", "缺少 task_id", status=400)
-    cfg = _read_config_yaml()
+    with _config_lock:
+        cfg = _read_config_yaml()
     existing = [t for t in cfg.get("tasks", []) if t.get("task_id") == task_id]
     if existing:
         return error("TASK_EXISTS", f"任务 '{task_id}' 已存在", status=409)
@@ -172,7 +182,8 @@ def create_task():
 def update_task(task_id):
     """更新已有任务配置。"""
     task_data = request.get_json() or {}
-    cfg = _read_config_yaml()
+    with _config_lock:
+        cfg = _read_config_yaml()
     tasks = cfg.get("tasks", [])
     idx = next((i for i, t in enumerate(tasks) if t.get("task_id") == task_id), None)
     if idx is None:
@@ -204,7 +215,8 @@ def get_task_config(task_id):
 @require_auth("admin")
 def delete_task(task_id):
     """删除任务配置。"""
-    cfg = _read_config_yaml()
+    with _config_lock:
+        cfg = _read_config_yaml()
     tasks = cfg.get("tasks", [])
     new_tasks = [t for t in tasks if t.get("task_id") != task_id]
     if len(new_tasks) == len(tasks):
@@ -220,14 +232,14 @@ def delete_task(task_id):
 
 
 def _build_task_dict(data: dict) -> dict:
-    """从表单数据构建任务 dict（包含默认值）。"""
+    """从表单数据构建任务 dict（含默认值）。"""
     return {
         "task_id": data.get("task_id", ""),
         "name": data.get("name", data.get("task_id", "")),
         "enabled": data.get("enabled", True),
         "priority": data.get("priority", 1),
         "monitor": {
-            "folder_path": data.get("monitor_folder", "D:\\data\\input"),
+            "folder_path": data.get("monitor_folder", "."),
             "file_extensions": data.get("file_extensions", [".csv"]),
             "recursive": data.get("recursive", False),
             "debounce_seconds": data.get("debounce_seconds", 3),
@@ -241,7 +253,6 @@ def _build_task_dict(data: dict) -> dict:
             "transformer_module": data.get("transformer_module", ""),
             "transformer_function": data.get("transformer_function", ""),
             "sandbox_timeout": data.get("sandbox_timeout", 30),
-            "sandbox_memory_mb": data.get("sandbox_memory_mb", 256),
         },
         "table": {
             "base_table": data.get("base_table", "data"),
@@ -253,14 +264,11 @@ def _build_task_dict(data: dict) -> dict:
         },
         "error_handling": {
             "max_retries": data.get("max_retries", 3),
-            "retry_backoff": data.get("retry_backoff", [5, 30, 120]),
             "dead_letter_dir": data.get("dead_letter_dir", ""),
-            "on_row_error": data.get("on_row_error", "skip"),
         },
         "archive": {
             "mode": data.get("archive_mode", "keep"),
             "archive_dir": data.get("archive_dir", ""),
-            "retain_structure": data.get("retain_structure", True),
             "compress_after_days": data.get("compress_after_days", 0),
             "cleanup_after_days": data.get("cleanup_after_days", 0),
         },

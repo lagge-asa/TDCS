@@ -10,7 +10,7 @@ import os
 import re
 import threading
 import logging
-from typing import Optional, Callable, List
+from typing import Optional
 
 from urllib.parse import quote
 
@@ -25,6 +25,19 @@ from .config_validator import validate_config
 from .exceptions import ConfigValidationError
 
 logger = logging.getLogger(__name__)
+
+_BUILTIN_VARS = frozenset({"HOSTNAME", "PID"})  # 内置模板变量，不参与 env var 替换
+
+def _env_replace(match):
+    var = match.group(1)
+    if var in _BUILTIN_VARS:
+        return match.group(0)  # 保留原样，交给 _resolve_instance_id
+    val = os.environ.get(var)
+    if val is None:
+        raise ConfigValidationError(
+            f"Required env var '${{{var}}}' is not set")
+    return val
+
 
 class ConfigManager:
     """配置管理器: frozen dataclass + 原子替换 + 热加载."""
@@ -87,17 +100,6 @@ class ConfigManager:
 
         # 跳过由 _resolve_instance_id 处理的内置模板变量，
         # 避免 HOSTNAME/PID 等非标准 env var 导致启动崩溃
-        _BUILTIN_VARS = {"HOSTNAME", "PID"}
-
-        def _env_replace(match):
-            var = match.group(1)
-            if var in _BUILTIN_VARS:
-                return match.group(0)  # 保留原样，交给 _resolve_instance_id
-            val = os.environ.get(var)
-            if val is None:
-                raise ConfigValidationError(
-                    f"Required env var '${{{var}}}' is not set")
-            return val
 
         content = re.sub(r'\$\{(\w+)\}', _env_replace, content)
         try:
@@ -109,10 +111,8 @@ class ConfigManager:
         svc = raw["service"]
         db = raw["database"]
         cc = raw.get("concurrency", {})
-        enc = raw.get("encryption", {})
         ha = raw.get("high_availability", {})
         web = raw.get("web", {})
-        cache = raw.get("cache", {})
         mon = raw.get("monitoring", {})
 
         return AppConfig(
@@ -210,7 +210,6 @@ class ConfigManager:
             transformer_module=e["transformer_module"],
             transformer_function=e["transformer_function"],
             sandbox_timeout=e.get("sandbox_timeout", 30),
-            sandbox_memory_mb=e.get("sandbox_memory_mb", 256),
             base_table=tb["base_table"],
             partition_field=tb["partition_field"],
             partition_field_format=tb.get("partition_field_format", "%Y-%m-%d"),

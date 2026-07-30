@@ -9,8 +9,7 @@ from sqlalchemy import text
 import csv, io
 
 from ..auth import require_auth
-from ..response import ok, paginated
-from ..pagination import get_pagination
+from ..response import ok, get_pagination, paginated
 
 bp = Blueprint("audit", __name__)
 
