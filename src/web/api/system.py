@@ -90,6 +90,18 @@ def metrics():
         return "# prometheus_client not installed\n", 200
 
 
+@bp.get("/api/v1/auth/me")
+@require_auth("viewer")
+def current_user():
+    """返回当前 JWT 用户信息，用于前端恢复登录状态。"""
+    user = request.current_user
+    return ok({
+        "id": user.get("sub"),
+        "username": user.get("username"),
+        "role": user.get("role"),
+    })
+
+
 @bp.post("/api/v1/auth/login")
 def login():
     """登录：返回 JWT token。每 IP 限制 5 次/分钟."""
@@ -110,25 +122,29 @@ def login():
         return error("DB_UNAVAILABLE", "DB unavailable", status=503)
 
     from sqlalchemy import text
-    with db.master_conn() as conn:
-        row = conn.execute(
-            text("SELECT id, password_hash, role, enabled FROM users WHERE username=:u"),
-            {"u": username}
-        ).mappings().first()
+    try:
+        with db.master_conn() as conn:
+            row = conn.execute(
+                text("SELECT id, password_hash, role, enabled FROM users WHERE username=:u"),
+                {"u": username}
+            ).mappings().first()
 
-        if not row or not row["enabled"]:
-            # 消除用户名枚举时序侧信道：用户不存在时也执行一次 checkpw
-            bcrypt.checkpw(password.encode(), _get_dummy_hash())
-            return error("INVALID_CREDENTIALS", "Invalid credentials", status=401)
+            if not row or not row["enabled"]:
+                # 消除用户名枚举时序侧信道：用户不存在时也执行一次 checkpw
+                bcrypt.checkpw(password.encode(), _get_dummy_hash())
+                return error("INVALID_CREDENTIALS", "Invalid credentials", status=401)
 
-        stored = row["password_hash"]
-        if isinstance(stored, str):
-            stored = stored.encode()
-        if not bcrypt.checkpw(password.encode(), stored):
-            return error("INVALID_CREDENTIALS", "Invalid credentials", status=401)
+            stored = row["password_hash"]
+            if isinstance(stored, str):
+                stored = stored.encode()
+            if not bcrypt.checkpw(password.encode(), stored):
+                return error("INVALID_CREDENTIALS", "Invalid credentials", status=401)
 
-        conn.execute(text("UPDATE users SET last_login=NOW() WHERE id=:id"), {"id": row["id"]})
-        conn.commit()
+            conn.execute(text("UPDATE users SET last_login=NOW() WHERE id=:id"), {"id": row["id"]})
+            conn.commit()
+    except Exception as exc:
+        logger.exception("Login database operation failed: %s", exc)
+        return error("DB_UNAVAILABLE", "Database unavailable", status=503)
 
     expire_hours = current_app.config.get("TOKEN_EXPIRE_HOURS", 8)
     token = generate_token(row["id"], username, row["role"], expire_hours=expire_hours)

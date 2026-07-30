@@ -31,6 +31,31 @@ class TaskManager:
         self._scanners: Dict[str, object] = {}
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        self._cm.add_listener(self._on_config_changed)
+
+    def _on_config_changed(self, old_config, new_config) -> None:
+        """配置成功热加载后同步运行中的 watcher/scanner。"""
+        old_tasks = {t.task_id: t for t in (old_config.tasks if old_config else ())}
+        new_tasks = {t.task_id: t for t in new_config.tasks}
+        with self._lock:
+            running_ids = set(self._watchers) | set(self._scanners)
+        changed_ids = {
+            task_id for task_id in running_ids & new_tasks.keys()
+            if old_tasks.get(task_id) != new_tasks[task_id]
+        }
+        removed_or_disabled = {
+            task_id for task_id in running_ids
+            if task_id not in new_tasks or not new_tasks[task_id].enabled
+        }
+        for task_id in removed_or_disabled:
+            self.stop_task(task_id)
+            self._pool.resume_task(task_id)
+        for task_id in changed_ids - removed_or_disabled:
+            self.stop_task(task_id)
+            self.start_task(task_id)
+        for task_id, task in new_tasks.items():
+            if task.enabled and task_id not in running_ids and task_id not in removed_or_disabled:
+                self.start_task(task_id)
 
     def start_all(self) -> None:
         """启动所有已启用任务."""

@@ -149,10 +149,14 @@ def retry_file(file_id: int):
             SET status='PENDING', retry_count=0,
                 error_type=NULL, error_message=NULL,
                 claim_expires_at=NULL, claimed_by=NULL
-            WHERE id=:id
+            WHERE id=:id AND status='FAILED'
         """), {"id": file_id})
         conn.commit()
 
     if result.rowcount == 0:
+        with db.slave_conn() as conn:
+            exists = conn.execute(text("SELECT 1 FROM processed_files WHERE id=:id"), {"id": file_id}).scalar()
+        if exists:
+            return error("FILE_NOT_RETRYABLE", "只有 FAILED 状态的文件可以重试", status=409)
         return error("FILE_NOT_FOUND", "文件记录不存在", status=404)
     return ok({"status": "queued", "file_id": file_id})

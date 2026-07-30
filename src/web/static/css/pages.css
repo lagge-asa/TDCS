@@ -1,0 +1,22 @@
+@media (max-width:768px){
+ .sidebar{width:56px;overflow:hidden}
+ .sidebar .logo h1,.sidebar .logo p,.sidebar .nav-section,
+ .sidebar nav a span,.sidebar .user-meta,.sidebar .user-actions{display:none}
+ .sidebar nav a{gap:0;justify-content:center;padding:10px 0}
+ .sidebar nav a svg{width:18px;height:18px}
+ .user-info{justify-content:center;padding:10px}
+ .main{margin-left:56px;padding:16px}
+ h2{font-size:16px}
+ .kpi-row{grid-template-columns:repeat(2,1fr)!important}
+}
+@media (max-width:480px){
+ .kpi-row{grid-template-columns:1fr!important}
+ .card{padding:16px}
+}
+
+/* ── 表格排序指示器 ──────────────────── */
+th.sortable{cursor:pointer;user-select:none;transition:color .15s}
+th.sortable:hover{color:var(--text)}
+th.sortable::after{content:' ↕';opacity:.3;font-size:10px}
+th.sortable.asc::after{content:' ↑';opacity:1;color:var(--accent)}
+th.sortable.desc::after{content:' ↓';opacity:1;color:var(--accent)}

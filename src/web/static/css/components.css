@@ -1,0 +1,78 @@
+ 质感增强 — transitions, animations, micro-interactions
+ ═══════════════════════════════════════════════════════ */
+
+/* ── 页面切换 ─────────────────────────── */
+.page{display:none}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── 登录页动画 ──────────────────────── */
+.login-box{animation:scaleIn .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes scaleIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+
+/* ── 按钮按下反馈 ────────────────────── */
+.btn{transition:all .15s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden}
+.btn:active{transform:scale(.96)}
+.btn::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,.1);opacity:0;transition:opacity .3s}
+.btn:active::after{opacity:1}
+
+/* ── 卡片悬浮 ────────────────────────── */
+.card{transition:box-shadow .2s,transform .2s}
+.card:hover{box-shadow:var(--shadow-md)}
+.kpi{transition:transform .2s,box-shadow .2s}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+
+/* ── 表格行入场 ──────────────────────── */
+@keyframes rowIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:translateX(0)}}
+tbody tr{animation:rowIn .3s ease backwards}
+tbody tr:nth-child(1){animation-delay:0s}
+tbody tr:nth-child(2){animation-delay:.03s}
+tbody tr:nth-child(3){animation-delay:.06s}
+tbody tr:nth-child(4){animation-delay:.09s}
+tbody tr:nth-child(5){animation-delay:.12s}
+tbody tr:nth-child(n+6){animation-delay:.15s}
+tr:nth-child(even) td{background:rgba(0,0,0,.01)} tr:hover td{transition:background .12s;background:var(--accent-bg)!important}
+
+/* ── Toast 弹性入场 ──────────────────── */
+@keyframes toastIn{0%{transform:translateY(80px) scale(.9);opacity:0}60%{transform:translateY(-4px) scale(1.02)}100%{transform:translateY(0) scale(1);opacity:1}}
+.toast.show{animation:toastIn .4s cubic-bezier(.34,1.56,.64,1)}
+
+/* ── Modal 入场 ──────────────────────── */
+.modal-overlay.show{animation:fadeIn .2s ease}
+.modal-overlay.show .modal{animation:scaleIn .25s cubic-bezier(.34,1.56,.64,1)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* ── 导航栏 hover 指示器 ─────────────── */
+nav a{transition:all .18s cubic-bezier(.4,0,.2,1);position:relative}
+nav a::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;background:var(--accent);transform:scaleY(0);transition:transform .18s cubic-bezier(.34,1.56,.64,1)}
+nav a:hover::before,nav a.active::before{transform:scaleY(1)}
+
+/* ── 自定义滚动条 ────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
+
+/* ── 加载脉冲点 ──────────────────────── */
+@keyframes dotPulse{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.loading-dots span{animation:dotPulse 1.4s infinite;font-size:20px;line-height:1}
+.loading-dots span:nth-child(2){animation-delay:.2s}
+.loading-dots span:nth-child(3){animation-delay:.4s}
+
+/* ── 选中文本颜色 ────────────────────── */
+::selection{background:var(--accent-bg);color:var(--accent)}
+
+/* ── 输入框聚焦增强 ──────────────────── */
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);transition:all .15s}
+
+/* ── 侧边栏活跃指示光效 ──────────────── */
+nav a.active{box-shadow:inset 0 0 0 1px rgba(96,165,250,.15)}
+
+/* ── KPI 数字跳动 ────────────────────── */
+@keyframes countUp{from{opacity:.3;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.kpi .v.changed{animation:countUp .4s ease}
+
+/* ── 快捷提示浮层 ────────────────────── */
+.help-badge{position:fixed;bottom:16px;left:16px;z-index:50;background:var(--bg-raised);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:11px;color:var(--text-muted);cursor:pointer;transition:all .15s;opacity:.6}
+.help-badge:hover{opacity:1;color:var(--text)}
+
+/* ── 响应式 ──────────────────────────── */

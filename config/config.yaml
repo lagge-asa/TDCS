@@ -53,4 +53,43 @@ monitoring:
     port: 9090
   alerting:
     enabled: false
-tasks: []
+tasks:
+  - task_id: "web_placeholder"
+    name: "Web 页面占位任务"
+    enabled: false
+    priority: 5
+    monitor:
+      folder_path: "D:\\TDCS\\input"
+      file_extensions: [".csv"]
+      recursive: false
+      debounce_seconds: 3
+      stability_check_interval: 1
+      stability_check_count: 3
+    etl:
+      extractor: "csv"
+      encoding: "utf-8"
+      stream_threshold_mb: 100
+      batch_size: 1000
+      transformer_module: "custom_etl.order_cleaner"
+      transformer_function: "transform"
+      sandbox_timeout: 30
+    table:
+      base_table: "tdcs_placeholder"
+      partition_field: "business_date"
+      partition_field_format: "%Y-%m-%d"
+      create_table_template: "sql_templates/order_template.sql"
+      retention_months: 24
+      archive_old_tables: true
+    error_handling:
+      max_retries: 3
+      retry_backoff: [5, 30, 120]
+      dead_letter_dir: "D:\\TDCS\\dead"
+    archive:
+      mode: "move"
+      archive_dir: "D:\\TDCS\\archive"
+      retain_structure: true
+      compress_after_days: 7
+      cleanup_after_days: 90
+    schedule:
+      poll_interval: 60
+      poll_incremental: true

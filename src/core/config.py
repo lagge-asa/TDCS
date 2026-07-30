@@ -47,7 +47,20 @@ class ConfigManager:
         self._config: Optional[AppConfig] = None
         self._task_index: dict = {}  # task_id -> TaskConfig，O(1) 查找
         self._lock = threading.Lock()
+        self._listeners: list = []
 
+    def add_listener(self, listener) -> None:
+        """注册配置成功变更回调，回调参数为 (old_config, new_config)。"""
+        if not callable(listener):
+            raise TypeError("listener must be callable")
+        with self._lock:
+            if listener not in self._listeners:
+                self._listeners.append(listener)
+
+    def remove_listener(self, listener) -> None:
+        with self._lock:
+            if listener in self._listeners:
+                self._listeners.remove(listener)
 
     def load(self) -> None:
         """初始加载, 失败则抛异常阻止启动."""
@@ -73,8 +86,16 @@ class ConfigManager:
             new_task_index = {t.task_id: t for t in new_config.tasks}
 
             with self._lock:
+                old_config = self._config
                 self._config = new_config
                 self._task_index = new_task_index
+                listeners = tuple(self._listeners)
+
+            for listener in listeners:
+                try:
+                    listener(old_config, new_config)
+                except Exception:
+                    logger.exception("Config change listener failed")
 
             logger.info("Config hot-reloaded successfully")
         except Exception as e:

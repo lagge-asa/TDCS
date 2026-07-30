@@ -75,7 +75,6 @@ def test_hot_reload_invalid_keeps_old(config_file, tmp_path):
     assert cm.config is old_config
 
 
-@pytest.mark.skip(reason="ConfigManager.add_listener not yet implemented")
 def test_hot_reload_success_notifies_listener(config_file, tmp_path):
     cm = ConfigManager(config_file)
     cm.load()

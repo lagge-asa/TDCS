@@ -1,9 +1,17 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0"
 title TDCS Launcher
 
-cd /d "%~dp0"
-set "PID_FILE=%cd%\.tdcs.pid"
+set "ROOT=%cd%"
+set "PYTHON=%ROOT%\.venv\Scripts\python.exe"
+set "PID_FILE=%ROOT%\.tdcs.pid"
+set "LOG_DIR=%ROOT%\logs"
+set "OUT_LOG=%LOG_DIR%\tdcs.stdout.log"
+set "ERR_LOG=%LOG_DIR%\tdcs.stderr.log"
+set "PORT=8080"
+
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
 echo.
 echo ========================================
@@ -11,112 +19,111 @@ echo   TDCS - Timed Data Collection Service
 echo ========================================
 echo.
 
-:: ── 1. Python ────────────────────────────
-where python >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Python not found. Install Python 3.10+.
-    pause & exit /b 1
+if not exist "%PYTHON%" (
+    echo [ERROR] Virtual environment not found: %PYTHON%
+    echo Run: py -3 -m venv .venv
+    pause
+    exit /b 1
 )
-for /f "tokens=2" %%v in ('python --version 2^>^&1') do echo [OK] Python %%v
-
-:: ── 2. venv ──────────────────────────────
-if not exist ".venv\Scripts\activate.bat" (
-    echo [..] Creating virtual environment...
-    python -m venv .venv
-    if errorlevel 1 ( echo [ERROR] venv creation failed & pause & exit /b 1 )
-    echo [OK] venv created
-) else (
-    echo [OK] venv ready
-)
-call .venv\Scripts\activate.bat
-
-:: ── 3. dependencies ──────────────────────
-pip show PyMySQL >nul 2>&1
-if errorlevel 1 (
-    echo [..] Installing dependencies...
-    pip install -r requirements.txt -q
-    if errorlevel 1 ( echo [ERROR] pip install failed & pause & exit /b 1 )
-    echo [OK] dependencies installed
-) else (
-    echo [OK] dependencies ready
+if not exist "%ROOT%\config\config.yaml" (
+    echo [ERROR] config\config.yaml not found.
+    pause
+    exit /b 1
 )
 
-:: ── 4. config ────────────────────────────
-if not exist "config\config.yaml" (
-    if exist "config\config.yaml.example" (
-        copy "config\config.yaml.example" "config\config.yaml" >nul
-        echo [OK] config.yaml created from example
-    ) else (
-        echo [ERROR] config.yaml.example not found
-        pause & exit /b 1
+rem If 8080 is already listening, reuse the existing healthy service.
+powershell -NoProfile -Command "try {$c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',%PORT%); $c.Close(); exit 0} catch {exit 1}" >nul 2>&1
+if not errorlevel 1 (
+    echo [OK] TDCS is already listening on port %PORT%.
+    echo Web UI: http://127.0.0.1:%PORT%
+    echo LAN UI: http://192.168.10.25:%PORT%
+    start "" "http://127.0.0.1:%PORT%/"
+    pause
+    exit /b 0
+)
+
+rem Do not start a second TDCS instance.
+if exist "%PID_FILE%" (
+    set /p OLD_PID=<"%PID_FILE%"
+    if defined OLD_PID (
+        powershell -NoProfile -Command "if (Get-Process -Id !OLD_PID! -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>&1
+        if not errorlevel 1 (
+            echo [WARN] TDCS is already running, PID !OLD_PID!.
+            echo Web UI: http://127.0.0.1:%PORT%
+            pause
+            exit /b 0
+        )
     )
-) else (
-    echo [OK] config.yaml ready
+    del /q "%PID_FILE%" >nul 2>&1
 )
 
-if "%DB_MASTER_PASSWORD%"=="" set "DB_MASTER_PASSWORD=etl_dev_pass"
-if "%WEB_SECRET_KEY%"==""    set "WEB_SECRET_KEY=dev_secret_key_change_in_production"
+rem Database password priority: explicit DB_MASTER_PASSWORD, then TDCS_DB_PASSWORD,
+rem then the local Docker default from docker-compose.yml.
+if not defined DB_MASTER_PASSWORD if defined TDCS_DB_PASSWORD set "DB_MASTER_PASSWORD=%TDCS_DB_PASSWORD%"
+if not defined DB_MASTER_PASSWORD set "DB_MASTER_PASSWORD=etl_dev_pass"
+if not defined WEB_SECRET_KEY set "WEB_SECRET_KEY=dev_secret_key_change_in_production"
 
-:: ── 5. Docker ────────────────────────────
-set "SKIP_DOCKER=1"
-where docker >nul 2>&1 && (
-    docker info >nul 2>&1 && set "SKIP_DOCKER=0"
+>"%OUT_LOG%" echo [%date% %time%] Starting TDCS
+>"%ERR_LOG%" echo [%date% %time%] Startup errors
+
+echo [..] Starting TDCS with the project Python environment...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $p = Start-Process -FilePath '%PYTHON%' -ArgumentList @('-m','src.main') -WorkingDirectory '%ROOT%' -RedirectStandardOutput '%OUT_LOG%' -RedirectStandardError '%ERR_LOG%' -PassThru; $p.Id | Set-Content -NoNewline '%PID_FILE%'" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Could not create the TDCS process. See:
+    echo        %ERR_LOG%
+    type "%ERR_LOG%"
+    pause
+    exit /b 1
 )
-
-if "%SKIP_DOCKER%"=="0" (
-    echo [..] Starting MySQL + Redis...
-    docker-compose up -d mysql redis
-    if errorlevel 1 ( echo [WARN] docker-compose failed, continuing anyway... & set SKIP_DOCKER=1 )
+if not exist "%PID_FILE%" (
+    echo [ERROR] TDCS PID file was not created.
+    type "%ERR_LOG%"
+    pause
+    exit /b 1
 )
-
-if "%SKIP_DOCKER%"=="0" (
-    echo [..] Waiting for MySQL...
-    for /l %%i in (1,1,30) do (
-        docker exec etl-mysql mysqladmin ping -h localhost -uroot -proot_dev_only >nul 2>&1
-        if not errorlevel 1 goto :mysql_ok
-        timeout /t 2 /nobreak >nul
-    )
-    echo [WARN] MySQL not ready after 60s
-    goto :skip_mysql
-    :mysql_ok
-    echo [OK] MySQL is ready
-    :skip_mysql
-) else (
-    echo [SKIP] Docker not available
-)
-
-:: ── 6. Start service ─────────────────────
-echo.
-echo Starting TDCS on http://127.0.0.1:8080 ...
-
-start "TDCS" /B python -m src.main >nul 2>&1
-
-:: Save PID
-powershell -Command "(Get-WmiObject Win32_Process -Filter \"name='python.exe' and commandline like '%%src.main%%'\" | Select-Object -ExpandProperty ProcessId) -join ' '"  > "%PID_FILE%" 2>nul
-echo PID saved to %PID_FILE%
-
-:: ── 7. Wait for port ─────────────────────
+echo [OK] TDCS process started, PID !PID!
+echo [..] Waiting for port %PORT% ...
 set "PORT_OK=0"
-for /l %%i in (1,1,20) do (
-    powershell -Command "try{(New-Object Net.Sockets.TcpClient('127.0.0.1',8080)).Close();exit 0}catch{exit 1}" >nul 2>&1
-    if not errorlevel 1 set "PORT_OK=1" & goto :port_ok
+for /l %%i in (1,1,30) do (
+    powershell -NoProfile -Command "try {$c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',%PORT%); $c.Close(); exit 0} catch {exit 1}" >nul 2>&1
+    if not errorlevel 1 (
+        set "PORT_OK=1"
+        goto :port_ok
+    )
+    powershell -NoProfile -Command "if (-not (Get-Process -Id !PID! -ErrorAction SilentlyContinue)) { exit 1 } else { exit 0 }" >nul 2>&1
+    if errorlevel 1 goto :process_dead
     timeout /t 1 /nobreak >nul
 )
+
 :port_ok
-
 if "!PORT_OK!"=="1" (
-    echo [OK] Service is ready
-    start http://127.0.0.1:8080
+    rem A listening port is not enough: /health must also report HTTP 200.
+    powershell -NoProfile -Command "try {$r=Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:%PORT%/health'; if($r.StatusCode -eq 200){exit 0}else{exit 1}} catch {exit 1}" >nul 2>&1
+    if errorlevel 1 (
+        echo [WARN] Web port is open, but /health is not ready (often database credentials/schema).
+        echo        Check %ERR_LOG%
+    ) else (
+        echo [OK] TDCS health check passed
+    )
+    echo [OK] TDCS is listening on 0.0.0.0:%PORT%
+    echo Web UI: http://127.0.0.1:%PORT%
+    echo LAN UI: http://192.168.10.25:%PORT%
+    echo Logs: %OUT_LOG% and %ERR_LOG%
+    start "" "http://127.0.0.1:%PORT%/"
 ) else (
-    echo [WARN] Service may still be starting, open http://127.0.0.1:8080 manually
+    echo [WARN] Process is still starting. Check logs:
+    echo        %OUT_LOG%
+    echo        %ERR_LOG%
 )
-
 echo.
-echo ───────────────────────────────────────
-echo   Web UI:   http://127.0.0.1:8080
-echo   Swagger:  http://127.0.0.1:8080/docs
-echo   Run stop.bat to shut down
-echo ───────────────────────────────────────
-echo.
+pause
+exit /b 0
 
-endlocal
+:process_dead
+echo [ERROR] TDCS stopped during startup.
+echo ----- stderr -----
+type "%ERR_LOG%"
+echo -------------------
+del /q "%PID_FILE%" >nul 2>&1
+pause
+exit /b 1

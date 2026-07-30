@@ -1,40 +1,41 @@
 @echo off
+setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0"
+title TDCS Stopper
+
+set "ROOT=%cd%"
+set "PID_FILE=%ROOT%\.tdcs.pid"
+
 echo.
 echo ========================================
 echo   TDCS - Stop Service
 echo ========================================
 echo.
 
-cd /d "%~dp0"
-set "PID_FILE=%cd%\.tdcs.pid"
-
-:: ── Stop Python process via PID file ─────
+set "STOPPED=0"
 if exist "%PID_FILE%" (
-    echo [..] Stopping TDCS process...
-    set /p PIDS=<"%PID_FILE%"
-    if not "!PIDS!"=="" (
-        for %%p in (!PIDS!) do (
-            taskkill /PID %%p /F >nul 2>&1
+    set /p PID=<"%PID_FILE%"
+    if defined PID (
+        powershell -NoProfile -Command "if (Get-Process -Id !PID! -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>&1
+        if not errorlevel 1 (
+            echo [..] Stopping TDCS, PID !PID! ...
+            powershell -NoProfile -Command "$p=Get-Process -Id !PID! -ErrorAction SilentlyContinue; if($p){$p.CloseMainWindow() | Out-Null; Start-Sleep -Seconds 2; if(-not $p.HasExited){$p.Kill()}}" >nul 2>&1
+            set "STOPPED=1"
         )
     )
-    del "%PID_FILE%" >nul 2>&1
-    echo [OK] Service stopped
+    del /q "%PID_FILE%" >nul 2>&1
+)
+
+rem Fallback: stop only processes whose command line is this project's src.main.
+powershell -NoProfile -Command "$root=[regex]::Escape('%ROOT%'); Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object {$_.CommandLine -match $root -and $_.CommandLine -match 'src\.main'} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+
+if "!STOPPED!"=="1" (
+    echo [OK] TDCS service stopped.
 ) else (
-    echo [..] No PID file found, trying window title fallback...
-    taskkill /F /FI "WINDOWTITLE eq TDCS" >nul 2>&1
-    echo [OK] Done
+    echo [OK] No running TDCS process found.
 )
-
-:: ── Stop Docker containers ───────────────
-where docker >nul 2>&1 && (
-    docker info >nul 2>&1 && (
-        echo [..] Stopping Docker containers...
-        docker-compose down >nul 2>&1
-        echo [OK] Containers stopped
-    )
-)
-
 echo.
 echo TDCS shut down complete.
 echo.
 pause
+exit /b 0
