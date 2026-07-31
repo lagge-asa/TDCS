@@ -29,7 +29,15 @@ function _error(msg, retryFn) {
 }
 function scoreClass(s) { return s>=80?'score-high':s>=60?'score-mid':'score-low'; }
 
-function openModal(id) { document.getElementById(id).classList.add('show'); }
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function openModal(id) {
+ const modal = document.getElementById(id);
+ if (!modal) { console.warn(`Modal not found: ${id}`); return; }
+ modal.classList.add('show');
+}
+function closeModal(id) {
+ const modal = document.getElementById(id);
+ if (!modal) { console.warn(`Modal not found: ${id}`); return; }
+ modal.classList.remove('show');
+}
 
 // ─── 仪表盘 ───────────────────────────────────────────────────────────────
