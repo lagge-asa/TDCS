@@ -372,10 +372,28 @@
  </div>
  <div style="border-top:1px solid var(--border);margin:16px 0;padding-top:12px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px"> 监控配置</div>
  <div class="field"><label>监控目录</label><div style="display:flex;gap:8px"><input type="text" id="tfFolder" placeholder="D:\data\input" style="flex:1"><button type="button" class="btn btn-ghost" onclick="openDirectoryPicker()">选择目录</button></div></div>
+ <div class="field"><label>文件扩展名 <span style="font-weight:400;color:var(--text-muted)">— 可多选</span></label>
+ <div id="extensionPicker" style="border:1px solid var(--border);border-radius:8px;padding:9px 12px;background:var(--bg);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".txt"> .txt</label>
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".csv"> .csv</label>
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".md"> .md</label>
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".json"> .json</label>
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".xlsx"> .xlsx</label>
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".xls"> .xls</label>
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".xml"> .xml</label>
+  <label style="font-size:12px"><input type="checkbox" name="tfExt" value=".log"> .log</label>
+  <input type="text" id="tfExtensionsCustom" placeholder="其他，如 .dat（逗号分隔）" style="flex:1;min-width:170px;padding:5px 8px;font-size:12px">
+ </div></div>
  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
- <div class="field"><label>文件扩展名</label><input type="text" id="tfExtensions" placeholder=".csv, .xlsx"></div>
- <div class="field"><label>稳定等待(秒)</label><input type="number" id="tfDebounce" value="3"></div>
- <div class="field"><label>稳定检查次数</label><input type="number" id="tfStabilityCount" value="3"></div>
+ <div class="field"><label>稳定等待(秒)</label><input type="number" id="tfDebounce" value="3" min="0"></div>
+ <div class="field"><label>稳定检查间隔(秒)</label><input type="number" id="tfStabilityInterval" value="1" min="1"></div>
+ <div class="field"><label>稳定检查次数</label><input type="number" id="tfStabilityCount" value="3" min="1"></div>
+ </div>
+ <div class="field"><label><input type="checkbox" id="tfRecursive"> 同时监控子目录</label></div>
+ <div style="border-top:1px solid var(--border);margin:16px 0;padding-top:12px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px"> 调度配置</div>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  <div class="field"><label>轮询间隔(秒)</label><input type="number" id="tfPollInterval" value="60" min="1"></div>
+  <div class="field"><label><input type="checkbox" id="tfPollIncremental" checked> 仅处理新增文件</label></div>
  </div>
  <div style="border-top:1px solid var(--border);margin:16px 0;padding-top:12px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px"> ETL 配置</div>
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -410,8 +428,23 @@
  </div>
 </div>
 
-<div class="toast" id="toast"></div>
-<div class="modal-overlay" id="cleanerEditModal">
+<!-- ── 服务器目录树选择器 ── -->
+<div class="modal-overlay" id="directoryPickerModal">
+ <div class="modal" style="width:620px;max-height:80vh;display:flex;flex-direction:column">
+  <h3>选择监控目录</h3>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+   <button class="btn btn-ghost" id="dirParentBtn" onclick="directoryUp()">返回上级</button>
+   <input id="dirCurrentPath" readonly style="flex:1;font-family:monospace;font-size:12px">
+  </div>
+  <div id="directoryTree" style="flex:1;min-height:240px;max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)"></div>
+  <div class="modal-actions">
+   <button class="btn btn-ghost" onclick="closeModal('directoryPickerModal')">取消</button>
+   <button class="btn btn-primary" onclick="chooseCurrentDirectory()">选择当前目录</button>
+  </div>
+ </div>
+</div>
+
+
  <div class="modal" style="width:640px">
  <h3 id="cleanerEditTitle">编辑模板</h3>
  <div class="field"><label>模板名称</label><input type="text" id="cleanerEditName" placeholder="英文名，如 my_cleaner" style="font-family:monospace"></div>

@@ -1,25 +1,48 @@
 
 let _cleanerFile = null, _downloadToken = null, _sourceVisible = false;
 
-// ── 服务器监控目录选择器 ───────────────────────────────────────────────
+function escapeHtml(value) {
+ return String(value).replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+}
+
+
+let _directoryPath = '', _directoryParent = null;
 async function openDirectoryPicker() {
  if (!requireRole('admin', '选择监控目录')) return;
- const current = document.getElementById('tfFolder')?.value.trim() || '';
+ _directoryPath = document.getElementById('tfFolder')?.value.trim() || '';
+ await loadDirectoryTree(_directoryPath);
+ openModal('directoryPickerModal');
+}
+async function loadDirectoryTree(path) {
  try {
-  const data = await api('GET', '/api/v1/config/directories' + (current ? '?path=' + encodeURIComponent(current) : ''));
-  const choices = data.directories || [];
-  const lines = choices.map((d, i) => `${i + 1}. ${d.name}`).join('\n');
-  const answer = prompt(`当前目录：${data.path}\n输入编号进入子目录，输入 0 选择当前目录${data.parent ? '，输入 -1 返回上级' : ''}\n\n${lines}`);
-  if (answer === null) return;
-  const n = Number(answer);
-  if (n === 0) { document.getElementById('tfFolder').value = data.path; return; }
-  if (n === -1 && data.parent) { document.getElementById('tfFolder').value = data.parent; openDirectoryPicker(); return; }
-  if (Number.isInteger(n) && n >= 1 && n <= choices.length) {
-   document.getElementById('tfFolder').value = choices[n - 1].path;
-   openDirectoryPicker();
-  } else { toast('请输入有效编号', 'err'); }
+  const q = path ? '?path=' + encodeURIComponent(path) : '';
+  const data = await api('GET', '/api/v1/config/directories' + q);
+  _directoryPath = data.path; _directoryParent = data.parent;
+  document.getElementById('dirCurrentPath').value = data.path;
+  document.getElementById('dirParentBtn').disabled = !_directoryParent;
+  const tree = document.getElementById('directoryTree');
+  const dirs = data.directories || [];
+  tree.innerHTML = dirs.length ? dirs.map(d => `<button type="button" class="btn btn-ghost" style="display:block;width:100%;text-align:left;margin:2px 0" onclick="loadDirectoryTree(${JSON.stringify(d.path)})">📁 ${escapeHtml(d.name)}</button>`).join('') : '<div class="empty">没有可进入的子目录</div>';
  } catch (e) { toast('读取目录失败：' + e.message, 'err'); }
 }
+function directoryUp() { if (_directoryParent) loadDirectoryTree(_directoryParent); }
+function chooseCurrentDirectory() {
+ document.getElementById('tfFolder').value = _directoryPath;
+ closeModal('directoryPickerModal');
+ toast('已选择监控目录');
+}
+function getSelectedExtensions() {
+ const values = [...document.querySelectorAll('input[name="tfExt"]:checked')].map(x => x.value);
+ const custom = document.getElementById('tfExtensionsCustom')?.value || '';
+ return values.concat(custom.split(',').map(x => x.trim().toLowerCase()).filter(x => x && /^\.[a-z0-9]+$/.test(x))).filter((v, i, a) => a.indexOf(v) === i);
+}
+function setSelectedExtensions(exts) {
+ const values = new Set((exts || []).map(x => x.toLowerCase()));
+ document.querySelectorAll('input[name="tfExt"]').forEach(x => { x.checked = values.has(x.value); values.delete(x.value); });
+ const custom = [...values];
+ document.getElementById('tfExtensionsCustom').value = custom.join(', ');
+}
+
 
 async function loadCleanerTemplates() {
  const sel = document.getElementById('templateSelect');

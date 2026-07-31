@@ -63,7 +63,10 @@ function openNewTask() {
  if (!requireRole('admin', '新建任务')) return;
  _editTaskId = null;
  document.getElementById('taskConfigTitle').textContent = '新建任务';
- ['tfTaskId','tfName','tfFolder','tfBaseTable','tfPartitionField','tfTableTemplate','tfDeadLetter','tfTransformer','tfTransformerFn'].forEach(id=>document.getElementById(id).value='');
+ ['tfTaskId','tfName','tfFolder','tfBaseTable','tfPartitionField','tfTableTemplate','tfDeadLetter','tfTransformer','tfTransformerFn','tfExtensionsCustom'].forEach(id=>document.getElementById(id).value='');
+ document.querySelectorAll('input[name="tfExt"]').forEach(x => { x.checked = false; });
+ document.getElementById('tfRecursive').checked = false;
+ document.getElementById('tfPollIncremental').checked = true;
  ['tfPriority','tfBatchSize','tfDebounce','tfStabilityCount','tfMaxRetries','tfRetention'].forEach(id=>document.getElementById(id).value=document.getElementById(id).defaultValue);
  document.getElementById('tfTaskId').disabled = false;
  document.getElementById('tfSaveBtn').textContent = ' 创建';
@@ -84,9 +87,14 @@ async function openEditTask(taskId) {
  document.getElementById('tfEnabled').value = t.enabled!==false?'true':'false';
  const mon = t.monitor||{};
  document.getElementById('tfFolder').value = mon.folder_path||'';
- document.getElementById('tfExtensions').value = (mon.file_extensions||[]).join(', ');
+ setSelectedExtensions(mon.file_extensions||[]);
  document.getElementById('tfDebounce').value = mon.debounce_seconds||3;
+ document.getElementById('tfStabilityInterval').value = mon.stability_check_interval||1;
  document.getElementById('tfStabilityCount').value = mon.stability_check_count||3;
+ document.getElementById('tfRecursive').checked = !!mon.recursive;
+ const sch = t.schedule||{};
+ document.getElementById('tfPollInterval').value = sch.poll_interval||60;
+ document.getElementById('tfPollIncremental').checked = sch.poll_incremental!==false;
  const etl = t.etl||{};
  document.getElementById('tfExtractor').value = etl.extractor||'csv';
  document.getElementById('tfEncoding').value = etl.encoding||'auto';
@@ -115,9 +123,10 @@ async function saveTaskConfig() {
  enabled: document.getElementById('tfEnabled').value==='true',
  priority: parseInt(document.getElementById('tfPriority').value)||1,
  monitor_folder: g('tfFolder'),
- file_extensions: g('tfExtensions').split(',').map(s=>s.trim()).filter(Boolean),
- recursive: document.getElementById('tfRecursive')?.checked || false,
+ file_extensions: getSelectedExtensions(),
+ recursive: document.getElementById('tfRecursive').checked,
  debounce_seconds: parseInt(document.getElementById('tfDebounce').value)||3,
+ stability_check_interval: parseInt(document.getElementById('tfStabilityInterval').value)||1,
  stability_check_count: parseInt(document.getElementById('tfStabilityCount').value)||3,
  extractor: g('tfExtractor'), encoding: g('tfEncoding'),
  batch_size: parseInt(document.getElementById('tfBatchSize').value)||1000,
@@ -134,8 +143,8 @@ async function saveTaskConfig() {
  archive_dir: g('tfArchiveDir'),
  compress_after_days: parseInt(document.getElementById('tfCompressAfterDays')?.value)||0,
  cleanup_after_days: parseInt(document.getElementById('tfCleanupAfterDays')?.value)||0,
- poll_interval: parseInt(document.getElementById('tfPollInterval')?.value)||60,
- poll_incremental: document.getElementById('tfPollIncremental')?.checked ?? true,
+ poll_interval: parseInt(document.getElementById('tfPollInterval').value)||60,
+ poll_incremental: document.getElementById('tfPollIncremental').checked,
  sandbox_timeout: parseInt(document.getElementById('tfSandboxTimeout')?.value)||30,
  };
  if (!data.task_id) { toast('请输入任务 ID', 'err'); return; }
