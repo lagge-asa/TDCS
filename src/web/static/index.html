@@ -450,6 +450,7 @@
 <div class="modal-overlay" id="cleanerEditModal">
  <div class="modal" style="width:640px">
 
+ <div class="modal-header"><h3 id="cleanerEditTitle">模板编辑器</h3><button class="modal-close" onclick="closeModal('cleanerEditModal')">×</button></div>
  <div class="field"><label>模板名称</label><input type="text" id="cleanerEditName" placeholder="英文名，如 my_cleaner" style="font-family:monospace"></div>
  <div class="field"><label>代码 <span style="font-weight:400;color:var(--text-muted)">— 必须包含 def clean_data(df): 函数</span></label>
  <textarea id="cleanerEditCode" style="width:100%;height:300px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;line-height:1.6;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;color:var(--text);resize:vertical" placeholder="import pandas as pd&#10;&#10;def clean_data(df):&#10; df = df.drop_duplicates()&#10; return df"></textarea>
