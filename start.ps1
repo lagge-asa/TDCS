@@ -37,18 +37,27 @@ if (Test-Healthy) {
     exit 0
 }
 
-# Remove stale TDCS processes belonging to this project only.
-$escapedRoot = [regex]::Escape($root)
-Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-    Where-Object { $_.CommandLine -match $escapedRoot -and $_.CommandLine -match 'src\.main' } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-
-if (-not $env:DB_MASTER_PASSWORD) {
-    if ($env:TDCS_DB_PASSWORD) { $env:DB_MASTER_PASSWORD = $env:TDCS_DB_PASSWORD }
-    else { $env:DB_MASTER_PASSWORD = 'etl_dev_pass' }
+# Remove stale TDCS processes before every restart. This prevents two Python
+# processes from sharing the same port/PID state.
+$tdcsProcesses = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+    Where-Object { $_.CommandLine -match 'src\.main' }
+foreach ($item in $tdcsProcesses) {
+    Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue
 }
+Start-Sleep -Milliseconds 500
+
+# The local Docker compose file defines this development password. Prefer an
+# explicitly supplied TDCS_DB_PASSWORD; do not reuse stale DB_MASTER_PASSWORD.
+if ($env:TDCS_DB_PASSWORD) { $env:DB_MASTER_PASSWORD = $env:TDCS_DB_PASSWORD }
+else { $env:DB_MASTER_PASSWORD = 'etl_dev_pass' }
 if (-not $env:WEB_SECRET_KEY) { $env:WEB_SECRET_KEY = 'dev_secret_key_change_in_production' }
 $env:PYTHONPATH = $root
+
+# Refuse to start if another application still owns 8080.
+$listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+if ($listener) {
+    throw "Port $port is still occupied by PID $($listener[0].OwningProcess)."
+}
 
 Set-Content -Path $outLog -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Starting TDCS" -Encoding UTF8
 Set-Content -Path $errLog -Value '' -Encoding UTF8
