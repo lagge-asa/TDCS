@@ -11,6 +11,7 @@ async function loadTasks() {
  const circuit = t.circuit_state || 'CLOSED';
  const running = t.watcher_running;
  let statusHtml = '';
+ let btns = [];
  if (!t.enabled) statusHtml = '<span class="badge badge-pending">⏸ 禁用</span>';
  else if (circuit === 'OPEN') statusHtml = '<span class="badge badge-failed">⚡ 熔断</span>';
  else if (paused) statusHtml = '<span class="badge badge-pending">⏸ 暂停</span>';

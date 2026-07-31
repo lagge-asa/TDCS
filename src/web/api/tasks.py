@@ -75,7 +75,6 @@ def _task_to_dict(task, db=None, pool=None, tm=None) -> dict:
         "watcher_running": bool(tm.is_running(task.task_id)) if tm else False,
         "queue_backlog": pool.queue_backlog(task.task_id) if pool else 0,
         "priority": task.priority,
-        "priority": task.priority,
         "monitor_folder": task.monitor_folder,
         "file_extensions": list(task.file_extensions),
         "recursive": task.recursive,
