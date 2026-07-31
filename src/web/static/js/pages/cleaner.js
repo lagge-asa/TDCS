@@ -27,11 +27,11 @@ async function loadDirectoryTree(path) {
   document.getElementById('dirParentBtn').disabled = !_directoryParent;
   const driveBar = document.getElementById('dirDriveBar');
   if (driveBar) {
-   driveBar.innerHTML = (data.drives || []).map(d => `<button type="button" class="btn btn-ghost" onclick="loadDirectoryTree(${JSON.stringify(d.path)})">💽 ${escapeHtml(d.name)}</button>`).join('');
+   driveBar.innerHTML = (data.drives || []).map(d => `<button type="button" class="btn btn-ghost" onclick="loadDirectoryTree(decodeURIComponent('${encodeURIComponent(d.path)}'))">💽 ${escapeHtml(d.name)}</button>`).join('');
   }
   const tree = document.getElementById('directoryTree');
   const dirs = data.directories || [];
-  tree.innerHTML = dirs.length ? dirs.map(d => `<button type="button" class="btn btn-ghost" style="display:block;width:100%;text-align:left;margin:2px 0" onclick="loadDirectoryTree(${JSON.stringify(d.path)})">📁 ${escapeHtml(d.name)}</button>`).join('') : '<div class="empty">没有可进入的子目录</div>';
+  tree.innerHTML = dirs.length ? dirs.map(d => `<button type="button" class="btn btn-ghost" style="display:block;width:100%;text-align:left;margin:2px 0" onclick="loadDirectoryTree(decodeURIComponent('${encodeURIComponent(d.path)}'))">📁 ${escapeHtml(d.name)}</button>`).join('') : '<div class="empty">没有可进入的子目录</div>';
   return true;
  } catch (e) {
   console.error('Directory picker request failed', {path, error: e});
