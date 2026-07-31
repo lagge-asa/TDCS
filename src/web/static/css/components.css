@@ -75,4 +75,41 @@ nav a.active{box-shadow:inset 0 0 0 1px rgba(96,165,250,.15)}
 .help-badge{position:fixed;bottom:16px;left:16px;z-index:50;background:var(--bg-raised);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:11px;color:var(--text-muted);cursor:pointer;transition:all .15s;opacity:.6}
 .help-badge:hover{opacity:1;color:var(--text)}
 
-/* ── 响应式 ──────────────────────────── */
+
+/* ── 任务配置弹窗布局优化 ───────────────────────────── */
+#taskConfigModal .modal{
+ width:min(820px,96vw);max-height:92vh;padding:28px 32px 22px;
+ overflow-y:auto;scrollbar-gutter:stable;
+}
+#taskConfigModal .modal h3{
+ position:sticky;top:-28px;z-index:2;background:var(--bg-raised);
+ padding:4px 0 16px;margin:0 -2px 8px;border-bottom:1px solid var(--border);
+}
+#taskConfigModal .field{margin-bottom:14px}
+#taskConfigModal .field label{margin-bottom:5px}
+#taskConfigModal input,#taskConfigModal select{min-height:38px}
+#taskConfigModal input[type=checkbox]{min-height:auto;width:auto;accent-color:var(--accent);vertical-align:-1px;margin-right:5px}
+#taskConfigModal .modal>div[style*="border-top"]{
+ margin:24px 0 16px!important;padding:10px 12px 8px!important;
+ border-top:0!important;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0;
+ color:var(--accent)!important;font-size:12px!important;font-weight:700;letter-spacing:.4px!important;
+}
+#taskConfigModal .modal>div[style*="grid-template-columns"]{align-items:start}
+#extensionPicker{background:var(--bg-raised)!important;gap:7px 12px!important;padding:10px 12px!important}
+#extensionPicker label{display:inline-flex;align-items:center;padding:3px 8px;border-radius:5px;background:var(--bg-hover);border:1px solid transparent;cursor:pointer;transition:.15s}
+#extensionPicker label:has(input:checked){background:var(--accent-bg);border-color:rgba(37,99,235,.25);color:var(--accent)}
+#extensionPicker input{min-height:auto!important}
+#directoryPickerModal .modal{width:min(680px,94vw);padding:24px}
+#directoryPickerModal h3{margin-bottom:16px}
+#directoryTree{background:var(--bg-hover)!important}
+#directoryTree .btn{background:var(--bg-raised);border:1px solid transparent;margin:3px 0!important;padding:9px 12px}
+#directoryTree .btn:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+#taskConfigModal .modal-actions{position:sticky;bottom:-22px;background:var(--bg-raised);padding:16px 0 2px;margin-top:22px;border-top:1px solid var(--border)}
+@media (max-width:700px){
+ #taskConfigModal .modal{padding:22px 18px 16px}
+ #taskConfigModal .modal h3{top:-22px}
+ #taskConfigModal .modal>div[style*="grid-template-columns"]{display:grid!important;grid-template-columns:1fr!important;gap:0!important}
+ #taskConfigModal .modal>div[style*="grid-template-columns"] .field{margin-bottom:12px}
+}
+
