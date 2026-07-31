@@ -320,6 +320,8 @@ def delete_task(task_id):
         cfg = _read_config_yaml()
         old_cfg = yaml.safe_load(yaml.safe_dump(cfg, allow_unicode=True))
         tasks = cfg.get("tasks", [])
+        if task_id == "web_placeholder":
+            return error("PROTECTED_TASK", "web_placeholder 是系统占位任务，不能删除；请先创建实际任务后再删除它", status=400)
         new_tasks = [t for t in tasks if t.get("task_id") != task_id]
         if len(new_tasks) == len(tasks):
             return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
