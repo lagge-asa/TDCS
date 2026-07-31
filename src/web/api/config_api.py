@@ -43,7 +43,9 @@ def list_directories():
         return error("DIRECTORY_ACCESS_DENIED", "没有权限读取该目录", status=403)
 
 
-
+@bp.get("/")
+@require_auth("viewer")
+def get_config():
     cm = current_app.config["config_manager"]
     cfg = cm.config
     pool = current_app.config.get("worker_pool")
