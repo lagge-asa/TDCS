@@ -23,6 +23,18 @@ bp = Blueprint("config_api", __name__)
 _config_lock = threading.Lock()
 
 
+def _windows_drives():
+    """返回当前服务器可访问的磁盘根目录。"""
+    if os.name != "nt":
+        return []
+    import string
+    return [
+        {"name": f"{letter}:\\", "path": f"{letter}:\\"}
+        for letter in string.ascii_uppercase
+        if os.path.isdir(f"{letter}:\\")
+    ]
+
+
 @bp.get("/directories")
 @require_auth("admin")
 def list_directories():
@@ -38,7 +50,13 @@ def list_directories():
                 entries.append({"name": item.name, "path": os.path.abspath(item.path)})
         entries.sort(key=lambda x: x["name"].lower())
         parent = os.path.dirname(path)
-        return ok({"path": path, "parent": parent if parent != path else None, "directories": entries})
+        return ok({
+            "path": path,
+            "parent": parent if parent != path else None,
+            "directories": entries,
+            # 磁盘根目录单独返回，前端可以从 D 盘切换到 C 盘等其他磁盘。
+            "drives": _windows_drives(),
+        })
     except PermissionError:
         return error("DIRECTORY_ACCESS_DENIED", "没有权限读取该目录", status=403)
 
