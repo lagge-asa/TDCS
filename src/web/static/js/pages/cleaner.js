@@ -27,7 +27,10 @@ async function loadDirectoryTree(path) {
   const tree = document.getElementById('directoryTree');
   const dirs = data.directories || [];
   tree.innerHTML = dirs.length ? dirs.map(d => `<button type="button" class="btn btn-ghost" style="display:block;width:100%;text-align:left;margin:2px 0" onclick="loadDirectoryTree(${JSON.stringify(d.path)})">📁 ${escapeHtml(d.name)}</button>`).join('') : '<div class="empty">没有可进入的子目录</div>';
- } catch (e) { toast('读取目录失败：' + e.message, 'err'); }
+ } catch (e) {
+  console.error('Directory picker request failed', {path, error: e});
+  toast('读取目录失败：' + e.message, 'err');
+ }
 }
 function directoryUp() { if (_directoryParent) loadDirectoryTree(_directoryParent); }
 function chooseCurrentDirectory() {

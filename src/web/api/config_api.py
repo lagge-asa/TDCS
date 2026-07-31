@@ -28,11 +28,16 @@ def _windows_drives():
     if os.name != "nt":
         return []
     import string
-    return [
-        {"name": f"{letter}:\\", "path": f"{letter}:\\"}
-        for letter in string.ascii_uppercase
-        if os.path.isdir(f"{letter}:\\")
-    ]
+    drives = []
+    for letter in string.ascii_uppercase:
+        root = f"{letter}:\\"
+        try:
+            if os.path.isdir(root):
+                drives.append({"name": root, "path": root})
+        except OSError:
+            # 某些映射盘或无权限磁盘可能在探测时抛出系统异常，跳过即可。
+            continue
+    return drives
 
 
 @bp.get("/directories")
@@ -57,8 +62,10 @@ def list_directories():
             # 磁盘根目录单独返回，前端可以从 D 盘切换到 C 盘等其他磁盘。
             "drives": _windows_drives(),
         })
-    except PermissionError:
+    except (PermissionError, OSError) as exc:
+        current_app.logger.warning("Cannot browse directory %s: %s", path, exc)
         return error("DIRECTORY_ACCESS_DENIED", "没有权限读取该目录", status=403)
+
 
 
 @bp.get("/")
