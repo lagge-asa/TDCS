@@ -72,3 +72,17 @@ def test_validate_table_name_injection():
     with pytest.raises(ValueError):
         TableRouter._validate_table_name("1invalid")
     TableRouter._validate_table_name("order_data_202601")  # OK
+
+
+def test_archive_old_tables_quotes_year_month_column():
+    db = MagicMock()
+    conn = db.master_conn.return_value.__enter__.return_value
+    router = TableRouter(db)
+    cfg = make_task_config(task_id="web_placeholder")
+    cfg.retention_months = 24
+
+    router.archive_old_tables(cfg)
+
+    sql = conn.execute.call_args.args[0].text
+    assert "`year_month` <= :cutoff" in sql
+    assert "AND year_month <=" not in sql

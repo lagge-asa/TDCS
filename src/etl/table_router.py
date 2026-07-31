@@ -166,7 +166,7 @@ class TableRouter:
                 UPDATE monthly_table_registry
                 SET lifecycle_status = 'ARCHIVED', archived_at = NOW()
                 WHERE task_id = :tid
-                  AND year_month <= :cutoff
+                  AND `year_month` <= :cutoff
                   AND lifecycle_status = 'ACTIVE'
             """), dict(tid=task_config.task_id, cutoff=cutoff_str))
             conn.commit()
