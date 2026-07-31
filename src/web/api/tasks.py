@@ -196,10 +196,13 @@ def _set_task_state(task_id: str, action: str) -> tuple:
     if not cm or not cm.get_task(task_id):
         return error("TASK_NOT_FOUND", f"任务 '{task_id}' 不存在", status=404)
     if tm:
-        if action == "enable":
-            tm.start_task(task_id)
-        else:
-            tm.stop_task(task_id)
+        try:
+            if action == "enable":
+                tm.start_task(task_id)
+            else:
+                tm.stop_task(task_id)
+        except (FileNotFoundError, NotADirectoryError, PermissionError, ValueError) as exc:
+            return error("TASK_START_FAILED", str(exc), status=400)
     return ok({"status": f"{action}d", "task_id": task_id})
 
 

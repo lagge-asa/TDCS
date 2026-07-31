@@ -73,23 +73,38 @@ class TaskManager:
             logger.error("Task not found: %s", task_id)
             return
 
+        if not os.path.isdir(task.monitor_folder):
+            raise ValueError(
+                f"监控目录不存在或不可访问: {task.monitor_folder}")
+
         with self._lock:
             # 若已运行则先停止旧实例，防止线程泄漏
             if task_id in self._watchers or task_id in self._scanners:
                 self._stop_task_locked(task_id)
 
-            # watchdog 监听
-            handler = EventHandler(task, self._on_file_detected)
             observer = Observer()
-            observer.schedule(handler, task.monitor_folder,
-                              recursive=task.recursive)
-            observer.start()
-            self._watchers[task_id] = observer
+            try:
+                # watchdog 监听
+                handler = EventHandler(task, self._on_file_detected)
+                observer.schedule(handler, task.monitor_folder,
+                                  recursive=task.recursive)
+                observer.start()
+                self._watchers[task_id] = observer
 
-            # 增量轮询兜底
-            scanner = PollingScanner(task, self._st, self._pool)
-            scanner.start()
-            self._scanners[task_id] = scanner
+                # 增量轮询兜底
+                scanner = PollingScanner(task, self._st, self._pool)
+                scanner.start()
+                self._scanners[task_id] = scanner
+            except Exception:
+                # observer.start() 可能已创建线程但后续步骤失败，必须清理。
+                try:
+                    observer.stop()
+                    observer.join(timeout=5)
+                except Exception:
+                    logger.exception("Failed to clean up watcher: %s", task_id)
+                self._watchers.pop(task_id, None)
+                self._scanners.pop(task_id, None)
+                raise
         logger.info("Task started: %s", task_id)
 
     def stop_task(self, task_id: str) -> None:

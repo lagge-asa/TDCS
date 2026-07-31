@@ -10,7 +10,12 @@ let _directoryPath = '', _directoryParent = null;
 async function openDirectoryPicker() {
  if (!requireRole('admin', '选择监控目录')) return;
  _directoryPath = document.getElementById('tfFolder')?.value.trim() || '';
- await loadDirectoryTree(_directoryPath);
+ const loaded = await loadDirectoryTree(_directoryPath);
+ if (!loaded && _directoryPath) {
+  // 配置中的旧目录可能已被移动或删除，回退到服务器当前工作目录。
+  _directoryPath = '';
+  await loadDirectoryTree('');
+ }
  openModal('directoryPickerModal');
 }
 async function loadDirectoryTree(path) {
@@ -27,9 +32,11 @@ async function loadDirectoryTree(path) {
   const tree = document.getElementById('directoryTree');
   const dirs = data.directories || [];
   tree.innerHTML = dirs.length ? dirs.map(d => `<button type="button" class="btn btn-ghost" style="display:block;width:100%;text-align:left;margin:2px 0" onclick="loadDirectoryTree(${JSON.stringify(d.path)})">📁 ${escapeHtml(d.name)}</button>`).join('') : '<div class="empty">没有可进入的子目录</div>';
+  return true;
  } catch (e) {
   console.error('Directory picker request failed', {path, error: e});
-  toast('读取目录失败：' + e.message, 'err');
+  if (!path) toast('读取服务器目录失败：' + e.message, 'err');
+  return false;
  }
 }
 function directoryUp() { if (_directoryParent) loadDirectoryTree(_directoryParent); }
