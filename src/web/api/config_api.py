@@ -23,9 +23,27 @@ bp = Blueprint("config_api", __name__)
 _config_lock = threading.Lock()
 
 
-@bp.get("/")
-@require_auth("viewer")
-def get_config():
+@bp.get("/directories")
+@require_auth("admin")
+def list_directories():
+    """列出服务器上的子目录，供任务监控目录选择器使用。"""
+    raw_path = (request.args.get("path") or "").strip()
+    path = os.path.abspath(raw_path or os.getcwd())
+    if not os.path.isdir(path):
+        return error("DIRECTORY_NOT_FOUND", "目录不存在", status=404)
+    try:
+        entries = []
+        for item in os.scandir(path):
+            if item.is_dir() and not item.name.startswith("."):
+                entries.append({"name": item.name, "path": os.path.abspath(item.path)})
+        entries.sort(key=lambda x: x["name"].lower())
+        parent = os.path.dirname(path)
+        return ok({"path": path, "parent": parent if parent != path else None, "directories": entries})
+    except PermissionError:
+        return error("DIRECTORY_ACCESS_DENIED", "没有权限读取该目录", status=403)
+
+
+
     cm = current_app.config["config_manager"]
     cfg = cm.config
     pool = current_app.config.get("worker_pool")

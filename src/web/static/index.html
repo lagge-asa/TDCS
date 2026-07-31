@@ -249,7 +249,8 @@
  <div id="fileInfo" style="font-size:12px;color:#8e8e9a;min-height:18px"></div>
  </div>
  <div class="card">
- <h3>② 选择清洗模板 <span id="templateCount" style="font-weight:400;color:#a0a0ab;text-transform:none;letter-spacing:0"></span></h3>
+ <h3>② 选择清洗模板 <span id="templateCount" style="font-weight:400;color:#a0a0ab;text-transform:none;letter-spacing:0"></span>
+ <button class="btn btn-ghost" style="float:right;font-size:11px" onclick="loadCleanerTemplates()">加载模板</button></h3>
  <select id="templateSelect" style="width:100%;margin-bottom:12px" onchange="onTemplateSelected()">
  <option value="">— 请选择模板 —</option>
  </select>
@@ -370,7 +371,7 @@
  <div class="field"><label>启用</label><select id="tfEnabled"><option value="true">是</option><option value="false">否</option></select></div>
  </div>
  <div style="border-top:1px solid var(--border);margin:16px 0;padding-top:12px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px"> 监控配置</div>
- <div class="field"><label>监控目录</label><input type="text" id="tfFolder" placeholder="D:\data\input"></div>
+ <div class="field"><label>监控目录</label><div style="display:flex;gap:8px"><input type="text" id="tfFolder" placeholder="D:\data\input" style="flex:1"><button type="button" class="btn btn-ghost" onclick="openDirectoryPicker()">选择目录</button></div></div>
  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
  <div class="field"><label>文件扩展名</label><input type="text" id="tfExtensions" placeholder=".csv, .xlsx"></div>
  <div class="field"><label>稳定等待(秒)</label><input type="number" id="tfDebounce" value="3"></div>

@@ -1,6 +1,26 @@
 
 let _cleanerFile = null, _downloadToken = null, _sourceVisible = false;
 
+// ── 服务器监控目录选择器 ───────────────────────────────────────────────
+async function openDirectoryPicker() {
+ if (!requireRole('admin', '选择监控目录')) return;
+ const current = document.getElementById('tfFolder')?.value.trim() || '';
+ try {
+  const data = await api('GET', '/api/v1/config/directories' + (current ? '?path=' + encodeURIComponent(current) : ''));
+  const choices = data.directories || [];
+  const lines = choices.map((d, i) => `${i + 1}. ${d.name}`).join('\n');
+  const answer = prompt(`当前目录：${data.path}\n输入编号进入子目录，输入 0 选择当前目录${data.parent ? '，输入 -1 返回上级' : ''}\n\n${lines}`);
+  if (answer === null) return;
+  const n = Number(answer);
+  if (n === 0) { document.getElementById('tfFolder').value = data.path; return; }
+  if (n === -1 && data.parent) { document.getElementById('tfFolder').value = data.parent; openDirectoryPicker(); return; }
+  if (Number.isInteger(n) && n >= 1 && n <= choices.length) {
+   document.getElementById('tfFolder').value = choices[n - 1].path;
+   openDirectoryPicker();
+  } else { toast('请输入有效编号', 'err'); }
+ } catch (e) { toast('读取目录失败：' + e.message, 'err'); }
+}
+
 async function loadCleanerTemplates() {
  const sel = document.getElementById('templateSelect');
  const cur = sel.value;
